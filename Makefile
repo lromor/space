@@ -3,7 +3,7 @@ CXX=g++
 CFLAGS=-g -O0 -Wall -DVK_USE_PLATFORM_XLIB_KHR -std=c++17
 LD_FLAGS=-lvulkan -lX11
 
-OBJECTS=vulkan-core.o vulkan-rendering.o
+OBJECTS=vulkan-core.o vulkan-rendering.o simple-scene.o
 MAIN_OBJECTS=space.o
 
 DEPENDENCY_RULES=$(OBJECTS:=.d) $(MAIN_OBJECTS:=.d)

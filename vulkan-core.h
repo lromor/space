@@ -29,7 +29,7 @@ namespace vk {
     struct VkAppContext {
       vk::UniqueInstance instance;
       vk::PhysicalDevice physical_device;
-      SurfaceData surface;
+      SurfaceData surface_data;
       uint32_t graphics_queue_family_index;
       uint32_t present_queue_family_index;
       vk::UniqueDevice device;

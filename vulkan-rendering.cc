@@ -1,6 +1,5 @@
 #include "vulkan-core.h"
 
-
 static std::optional<vk::PresentModeKHR> PickPresentMode(
   std::vector<vk::PresentModeKHR> const& present_modes) {
   vk::PresentModeKHR picked_mode = vk::PresentModeKHR::eFifo;
@@ -16,7 +15,6 @@ static std::optional<vk::PresentModeKHR> PickPresentMode(
   }
   return picked_mode;
 }
-
 
 static std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
   std::vector<vk::SurfaceFormatKHR> const& formats) {
@@ -39,12 +37,12 @@ static std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
     for (size_t i = 0; i <
            sizeof(requested_formats) / sizeof(requested_formats[0]); i++) {
       vk::Format requestedFormat = requested_formats[i];
-      auto it = std::find_if(formats.begin(),
-                             formats.end(),
-                             [requestedFormat, requestedColorSpace](auto const& f) {
-                               return (f.format == requestedFormat)
-                                 && (f.colorSpace == requestedColorSpace);
-                             });
+      auto it = std::find_if(
+        formats.begin(), formats.end(),
+        [requestedFormat, requestedColorSpace](auto const& f) {
+          return (f.format == requestedFormat)
+            && (f.colorSpace == requestedColorSpace);
+        });
       if (it != formats.end()) {
         picked_format = *it;
         break;

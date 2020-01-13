@@ -5,7 +5,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "vulkan-core.h"
-//#include "simple-scene.h"
+#include "simple-scene.h"
 
 
 int main(int argc, char *argv[]) {
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  //StaticDWireframeScene3D(&vk_ctx);
+  StaticWireframeScene3D scene(&vk_ctx);
   XCloseDisplay(display);
   return 0;
 }

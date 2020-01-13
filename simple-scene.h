@@ -6,22 +6,45 @@
 // where n meshes can be added dynamically
 // and camera with rotation/translation can be changed.
 // The scene renders the 3d object in wireframe mode.
-class StaticDWireframeScene3D {
+class StaticWireframeScene3D {
 public:
-  StaticDWireframeScene3D(const vk::core::VkAppContext *context) {}
+  StaticWireframeScene3D(vk::core::VkAppContext *context);
 
+  //void AddMesh();?
+  //SetViewpoint?
 private:
 
+  vk::core::VkAppContext *const vk_ctx_;
+
+  // "Simple"
   struct Simple3DRenderingContext {
     vk::UniqueCommandPool command_pool;
     vk::Queue graphics_queue;
-    vk::Queue present_queue
+    vk::Queue present_queue;
+    vk::UniqueCommandBuffer command_buffer;
+    vk::core::SwapChainData swap_chain_data;
+    vk::core::DepthBufferData depth_buffer_data;
+    vk::UniqueDescriptorSetLayout descriptor_set_layout;
+    vk::UniquePipelineLayout pipeline_layout;
+    vk::UniqueRenderPass render_pass;
+    vk::UniqueDescriptorPool unique_descriptor_pool;
+    vk::UniqueDescriptorSet unique_descriptor_set;
+    vk::UniquePipelineCache pipeline_cache;
+    vk::UniquePipeline graphics_pipeline;
+    vk::PipelineStageFlags wait_destination_stage_mask;
+    std::vector<vk::UniqueFramebuffer> framebuffers;
+
+    // Buffers
+    DepthBufferData depth_buffer_data;
+    BufferData uniform_buffer_data;
   };
 
-  Simple3DRenderingContext rendering_ctx_;
-  vk::core::VkAppContext *const vk_ctx_;
+  const Simple3DRenderingContext &InitRenderingContext();
+  Simple3DRenderingContext r_ctx_;
 
-  void InitializeObjects
+  vk::UniqueSemaphore image_acquired;
+  vk::UniqueFence fence;
+
 };
 
 #endif // __SIMPLE_SCENE_H_
