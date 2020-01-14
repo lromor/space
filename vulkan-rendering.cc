@@ -205,55 +205,28 @@ namespace vk {
                     });
     }
 
-    template <class T>
-    void CopyToDevice(
-      vk::UniqueDevice const& device, vk::UniqueDeviceMemory const& memory,
-      T const* pData, size_t count, size_t stride) {
-      assert(sizeof(T) <= stride);
-      uint8_t* deviceData = static_cast<uint8_t*>(
-        device->mapMemory(memory.get(), 0, count * stride));
-      if (stride == sizeof(T)) {
-        memcpy(deviceData, pData, count * sizeof(T));
-      } else {
-        for (size_t i = 0; i < count; i++) {
-          memcpy(deviceData, &pData[i], sizeof(T));
-          deviceData += stride;
-        }
-      }
-      device->unmapMemory(memory.get());
+    ImageData::ImageData(
+      vk::PhysicalDevice const& physical_device, vk::UniqueDevice const& device,
+      vk::Format format, vk::Extent2D const& extent, vk::ImageTiling tiling,
+      vk::ImageUsageFlags usage, vk::ImageLayout initial_layout,
+      vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask)
+      : format(format) {
+      vk::ImageCreateInfo imageCreateInfo(
+        vk::ImageCreateFlags(), vk::ImageType::e2D, format, vk::Extent3D(extent, 1), 1, 1,
+        vk::SampleCountFlagBits::e1, tiling, usage | vk::ImageUsageFlagBits::eSampled,
+        vk::SharingMode::eExclusive, 0, nullptr, initial_layout);
+      image = device->createImageUnique(imageCreateInfo);
+      device_memory = AllocateMemory(device, physical_device.getMemoryProperties(),
+                                     device->getImageMemoryRequirements(image.get()), memory_properties);
+      device->bindImageMemory(image.get(), device_memory.get(), 0);
+      vk::ComponentMapping component_mapping(
+        vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB,
+        vk::ComponentSwizzle::eA);
+      vk::ImageViewCreateInfo imageViewCreateInfo(
+        vk::ImageViewCreateFlags(), image.get(), vk::ImageViewType::e2D,
+        format, component_mapping, vk::ImageSubresourceRange(aspect_mask, 0, 1, 0, 1));
+      image_view = device->createImageViewUnique(imageViewCreateInfo);
     }
-
-    template <class T>
-    void CopyToDevice(
-      vk::UniqueDevice const& device, vk::UniqueDeviceMemory const& memory,
-      T const& data) {
-      CopyToDevice<T>(device, memory, &data, 1);
-    }
-
-    template <typename Func>
-    void OneTimeSubmit(
-      vk::UniqueCommandBuffer const& commandBuffer, vk::Queue const& queue,
-      Func const& func) {
-      commandBuffer->begin(
-        vk::CommandBufferBeginInfo(
-          vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-      func(commandBuffer);
-      commandBuffer->end();
-      queue.submit(vk::SubmitInfo(0, nullptr, nullptr, 1, &(*commandBuffer)), nullptr);
-      queue.waitIdle();
-    }
-
-    template <typename Func>
-    void OneTimeSubmit(
-      vk::UniqueDevice const& device, vk::UniqueCommandPool const& commandPool,
-      vk::Queue const& queue, Func const& func) {
-      vk::UniqueCommandBuffer commandBuffer =
-        std::move(device->allocateCommandBuffersUnique(
-                    vk::CommandBufferAllocateInfo(
-                      *commandPool, vk::CommandBufferLevel::ePrimary, 1)).front());
-      OneTimeSubmit(commandBuffer, queue, func);
-    }
-
 
     vk::UniqueDeviceMemory AllocateMemory(
       vk::UniqueDevice const& device,
@@ -279,6 +252,40 @@ namespace vk {
       }
       assert(typeIndex != ~0u);
       return typeIndex;
+    }
+
+    vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(
+      vk::UniqueDevice const& device,
+      std::vector<std::tuple<vk::DescriptorType, uint32_t, vk::ShaderStageFlags>> const& bindingData,
+      vk::DescriptorSetLayoutCreateFlags flags) {
+      std::vector<vk::DescriptorSetLayoutBinding> bindings(bindingData.size());
+      for (size_t i = 0; i < bindingData.size(); i++) {
+        bindings[i] = vk::DescriptorSetLayoutBinding(
+          i, std::get<0>(bindingData[i]), std::get<1>(bindingData[i]), std::get<2>(bindingData[i]));
+      }
+      return device->createDescriptorSetLayoutUnique(
+        vk::DescriptorSetLayoutCreateInfo(flags, bindings.size(), bindings.data()));
+    }
+
+    void UpdateDescriptorSets(
+      vk::UniqueDevice const& device, vk::UniqueDescriptorSet const& descriptor_set,
+      std::vector<std::tuple<vk::DescriptorType, vk::UniqueBuffer const&,
+      vk::UniqueBufferView const&>> const& buffer_data, uint32_t binding_offset) {
+      std::vector<vk::DescriptorBufferInfo> buffer_infos;
+      buffer_infos.reserve(buffer_data.size());
+
+      std::vector<vk::WriteDescriptorSet> write_descriptor_sets;
+      write_descriptor_sets.reserve(buffer_data.size());
+      uint32_t dst_binding = binding_offset;
+      for (auto const& bd : buffer_data) {
+        buffer_infos.push_back(vk::DescriptorBufferInfo(*std::get<1>(bd), 0, VK_WHOLE_SIZE));
+        write_descriptor_sets.push_back(
+          vk::WriteDescriptorSet(
+            *descriptor_set, dst_binding++, 0, 1, std::get<0>(bd), nullptr,
+            &buffer_infos.back(), std::get<2>(bd) ? &*std::get<2>(bd) : nullptr));
+      }
+      std::vector<vk::DescriptorImageInfo> imageInfos;
+      device->updateDescriptorSets(write_descriptor_sets, nullptr);
     }
   }
 }

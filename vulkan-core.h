@@ -56,6 +56,7 @@ namespace vk {
     };
 
     class BufferData {
+    public:
       BufferData(
         vk::PhysicalDevice const& physicalDevice,
         vk::UniqueDevice const& device, vk::DeviceSize size,
@@ -116,22 +117,49 @@ namespace vk {
     template <class T>
     void CopyToDevice(
       vk::UniqueDevice const& device, vk::UniqueDeviceMemory const& memory,
-      T const* pData, size_t count, size_t stride = sizeof(T));
+      T const* pData, size_t count, size_t stride = sizeof(T)) {
+      assert(sizeof(T) <= stride);
+      uint8_t* deviceData = static_cast<uint8_t*>(
+        device->mapMemory(memory.get(), 0, count * stride));
+      if (stride == sizeof(T)) {
+        memcpy(deviceData, pData, count * sizeof(T));
+      } else {
+        for (size_t i = 0; i < count; i++) {
+          memcpy(deviceData, &pData[i], sizeof(T));
+          deviceData += stride;
+        }
+      }
+      device->unmapMemory(memory.get());
+    }
 
     template <class T>
     void CopyToDevice(
       vk::UniqueDevice const& device, vk::UniqueDeviceMemory const& memory,
-      T const& data);
+      T const& data) { CopyToDevice<T>(device, memory, &data, 1); }
 
     template <typename Func>
     void OneTimeSubmit(
       vk::UniqueCommandBuffer const& commandBuffer, vk::Queue const& queue,
-      Func const& func);
+      Func const& func) {
+      commandBuffer->begin(
+        vk::CommandBufferBeginInfo(
+          vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+      func(commandBuffer);
+      commandBuffer->end();
+      queue.submit(vk::SubmitInfo(0, nullptr, nullptr, 1, &(*commandBuffer)), nullptr);
+      queue.waitIdle();
+    }
 
     template <typename Func>
     void OneTimeSubmit(
       vk::UniqueDevice const& device, vk::UniqueCommandPool const& commandPool,
-      vk::Queue const& queue, Func const& func);
+      vk::Queue const& queue, Func const& func) {
+      vk::UniqueCommandBuffer commandBuffer =
+        std::move(device->allocateCommandBuffersUnique(
+                    vk::CommandBufferAllocateInfo(
+                      *commandPool, vk::CommandBufferLevel::ePrimary, 1)).front());
+      OneTimeSubmit(commandBuffer, queue, func);
+    }
 
     vk::UniqueDeviceMemory AllocateMemory(
       vk::UniqueDevice const& device,
@@ -142,6 +170,17 @@ namespace vk {
     uint32_t FindMemoryType(
       vk::PhysicalDeviceMemoryProperties const& memoryProperties,
       uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask);
+
+    vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(
+      vk::UniqueDevice const& device,
+      std::vector<std::tuple<vk::DescriptorType, uint32_t, vk::ShaderStageFlags>> const& bindingData,
+      vk::DescriptorSetLayoutCreateFlags flags = {});
+
+    void UpdateDescriptorSets(
+      vk::UniqueDevice const& device, vk::UniqueDescriptorSet const& descriptorSet,
+      std::vector<std::tuple<vk::DescriptorType,
+      vk::UniqueBuffer const&,
+      vk::UniqueBufferView const&>> const& bufferData, uint32_t bindingOffset = 0);
   }
 }
 

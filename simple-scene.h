@@ -1,6 +1,17 @@
 #ifndef __SIMPLE_SCENE_H_
 #define __SIMPLE_SCENE_H_
 
+#include <vulkan/vulkan.hpp>
+
+#include "vulkan-core.h"
+
+
+
+struct Vertex {
+  float x, y, z, w;   // Position
+};
+
+
 // Given an initialized vulkan context
 // perform a basic rendering of a static scene
 // where n meshes can be added dynamically
@@ -23,28 +34,28 @@ private:
     vk::Queue present_queue;
     vk::UniqueCommandBuffer command_buffer;
     vk::core::SwapChainData swap_chain_data;
-    vk::core::DepthBufferData depth_buffer_data;
     vk::UniqueDescriptorSetLayout descriptor_set_layout;
     vk::UniquePipelineLayout pipeline_layout;
     vk::UniqueRenderPass render_pass;
-    vk::UniqueDescriptorPool unique_descriptor_pool;
-    vk::UniqueDescriptorSet unique_descriptor_set;
+    vk::UniqueDescriptorPool descriptor_pool;
+    vk::UniqueDescriptorSet descriptor_set;
     vk::UniquePipelineCache pipeline_cache;
     vk::UniquePipeline graphics_pipeline;
     vk::PipelineStageFlags wait_destination_stage_mask;
     std::vector<vk::UniqueFramebuffer> framebuffers;
 
-    // Buffers
-    DepthBufferData depth_buffer_data;
-    BufferData uniform_buffer_data;
   };
 
-  const Simple3DRenderingContext &InitRenderingContext();
+  Simple3DRenderingContext &&InitRenderingContext();
   Simple3DRenderingContext r_ctx_;
 
-  vk::UniqueSemaphore image_acquired;
-  vk::UniqueFence fence;
+  vk::UniqueSemaphore image_acquired_;
+  vk::UniqueFence fence_;
 
+  // Buffers
+  std::vector<vk::core::BufferData> uniform_buffer_data;
+  std::vector<vk::core::BufferData> index_buffer_data;
+  std::vector<vk::core::BufferData> vertex_buffer_data;
 };
 
 #endif // __SIMPLE_SCENE_H_
