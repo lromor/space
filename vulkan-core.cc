@@ -59,20 +59,23 @@ std::optional<vk::Extent2D> get_xlib_window_extent(Display *display, Window wind
   return {};
 }
 
-vk::UniqueDevice CreateDevice(vk::PhysicalDevice physical_device, uint32_t graphics_queue,
-                              std::vector<const char*> const& extensions) {
+vk::UniqueDevice CreateDevice(
+  vk::PhysicalDevice physical_device, uint32_t queue_family_index,
+  std::vector<std::string> const& extensions = {},
+  vk::PhysicalDeviceFeatures const* physical_device_features = NULL,
+  void const* p_next = NULL, float queue_priority = 0.0f) {
   std::vector<char const*> enabled_extensions;
   enabled_extensions.reserve(extensions.size());
-  for (auto const& ext : extensions) { enabled_extensions.push_back(ext); }
+  for (auto const& ext : extensions) { enabled_extensions.push_back(ext.data()); }
 
   // create a UniqueDevice
-  float kQueuePriority = 0.0f;
   vk::DeviceQueueCreateInfo device_queue_create_info(
-    vk::DeviceQueueCreateFlags(), graphics_queue, 1, &kQueuePriority);
+    vk::DeviceQueueCreateFlags(), queue_family_index, 1, &queue_priority);
 
   vk::DeviceCreateInfo device_create_info(
     vk::DeviceCreateFlags(), 1, &device_queue_create_info,
-    0, nullptr, enabled_extensions.size(), enabled_extensions.data());
+    0, nullptr, enabled_extensions.size(), enabled_extensions.data(),
+    physical_device_features);
 
   return physical_device.createDeviceUnique(device_create_info);
 }
@@ -321,13 +324,14 @@ namespace vk {
       }
 
       // Create logical device. This can enable another set of extensions.
-      const std::vector<const char*> device_extensions = {
+      const std::vector<std::string> device_extensions = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
       };
 
+      const auto physical_device_features = physical_device.getFeatures();
       vk::UniqueDevice device = CreateDevice(
         physical_device, graphics_and_present_queue_family_index.first,
-        device_extensions);
+        device_extensions, &physical_device_features);
 
       return VkAppContext{
         std::move(instance), physical_device, std::move(surface_data),
