@@ -30,32 +30,33 @@ private:
   // "Simple"
   struct Simple3DRenderingContext {
     vk::UniqueCommandPool command_pool;
+    vk::UniqueCommandBuffer command_buffer;
     vk::Queue graphics_queue;
     vk::Queue present_queue;
-    vk::UniqueCommandBuffer command_buffer;
+
     vk::core::SwapChainData swap_chain_data;
+
+    vk::core::DepthBufferData depth_buffer_data;
+    vk::core::BufferData uniform_buffer_data;
+
+
     vk::UniqueDescriptorSetLayout descriptor_set_layout;
     vk::UniquePipelineLayout pipeline_layout;
     vk::UniqueRenderPass render_pass;
+    std::vector<vk::UniqueFramebuffer> framebuffers;
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSet descriptor_set;
     vk::UniquePipelineCache pipeline_cache;
     vk::UniquePipeline graphics_pipeline;
     vk::PipelineStageFlags wait_destination_stage_mask;
-    std::vector<vk::UniqueFramebuffer> framebuffers;
 
   };
 
-  Simple3DRenderingContext &&InitRenderingContext();
+  struct Simple3DRenderingContext InitRenderingContext();
   Simple3DRenderingContext r_ctx_;
 
   vk::UniqueSemaphore image_acquired_;
   vk::UniqueFence fence_;
-
-  // Buffers
-  std::vector<vk::core::BufferData> uniform_buffer_data;
-  std::vector<vk::core::BufferData> index_buffer_data;
-  std::vector<vk::core::BufferData> vertex_buffer_data;
 };
 
 #endif // __SIMPLE_SCENE_H_

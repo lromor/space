@@ -44,7 +44,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  StaticWireframeScene3D scene(&vk_ctx);
+  {
+    StaticWireframeScene3D scene(&vk_ctx);
+  }
   XCloseDisplay(display);
   return 0;
 }

@@ -235,7 +235,7 @@ StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
     image_acquired_(vk_ctx->device->createSemaphoreUnique(vk::SemaphoreCreateInfo())),
     fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())) {}
 
-StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitRenderingContext() {
+StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
   vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
   vk::UniqueDevice &device = vk_ctx_->device;
@@ -277,15 +277,15 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
     device, uniform_buffer_data.deviceMemory,
     CreateModelViewProjectionClipMatrix(surface_data.extent));
 
-  vk::UniqueDescriptorSetLayout descriptorSetLayout =
+  vk::UniqueDescriptorSetLayout descriptor_set_layout =
     vk::core::CreateDescriptorSetLayout(
       device, { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex} });
-  vk::UniquePipelineLayout pipelineLayout =
+  vk::UniquePipelineLayout pipeline_layout =
     device->createPipelineLayoutUnique(
       vk::PipelineLayoutCreateInfo(
-        vk::PipelineLayoutCreateFlags(), 1, &descriptorSetLayout.get()));
+        vk::PipelineLayoutCreateFlags(), 1, &descriptor_set_layout.get()));
 
-  vk::UniqueRenderPass renderPass =
+  vk::UniqueRenderPass render_pass =
     CreateRenderPass(
       device, PickSurfaceFormat(
         physical_device.getSurfaceFormatsKHR(
@@ -293,7 +293,7 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
 
   std::vector<vk::UniqueFramebuffer> framebuffers =
     CreateFramebuffers(
-      device, renderPass, swap_chain_data.image_views,
+      device, render_pass, swap_chain_data.image_views,
       depth_buffer_data.image_view, surface_data.extent);
 
   vk::UniqueDescriptorPool descriptor_pool =
@@ -301,7 +301,7 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
   vk::UniqueDescriptorSet descriptor_set =
     std::move(
       device->allocateDescriptorSetsUnique(
-        vk::DescriptorSetAllocateInfo(*descriptor_pool, 1, &*descriptorSetLayout)).front());
+        vk::DescriptorSetAllocateInfo(*descriptor_pool, 1, &*descriptor_set_layout)).front());
 
   vk::core::UpdateDescriptorSets(
     device, descriptor_set,
@@ -318,24 +318,27 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
       vk::ShaderModuleCreateInfo(
         vk::ShaderModuleCreateFlags(), sizeof(simple_frag), simple_frag));
 
-  vk::UniquePipelineCache pipelineCache =
+  vk::UniquePipelineCache pipeline_cache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
 
-  vk::UniquePipeline graphicsPipeline =
+  vk::UniquePipeline graphics_pipeline =
     CreateGraphicsPipeline(
-      device, pipelineCache, std::make_pair(
+      device, pipeline_cache, std::make_pair(
         *vertex, nullptr),
       std::make_pair(*frag, nullptr),
       sizeof(Vertex),
       { { vk::Format::eR32G32B32A32Sfloat, 0 }, { vk::Format::eR32G32B32A32Sfloat, 16 } },
-      vk::FrontFace::eClockwise, true, pipelineLayout, renderPass);
+      vk::FrontFace::eClockwise, true, pipeline_layout, render_pass);
 
   vk::PipelineStageFlags wait_destination_stage_mask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
-  return std::move(StaticWireframeScene3D::Simple3DRenderingContext{
-    std::move(command_pool), graphics_queue, present_queue, std::move(command_buffer),
-      std::move(swap_chain_data), std::move(descriptorSetLayout), std::move(pipelineLayout),
-      std::move(renderPass), std::move(descriptor_pool), std::move(descriptor_set),
-      std::move(pipelineCache), std::move(graphicsPipeline),
-      std::move(wait_destination_stage_mask), std::move(framebuffers)});
+  StaticWireframeScene3D::Simple3DRenderingContext r_ctx{
+    std::move(command_pool), std::move(command_buffer), graphics_queue, present_queue,
+    std::move(swap_chain_data), std::move(depth_buffer_data), std::move(uniform_buffer_data),
+    std::move(descriptor_set_layout), std::move(pipeline_layout),
+    std::move(render_pass), std::move(framebuffers), std::move(descriptor_pool),
+    std::move(descriptor_set), std::move(pipeline_cache), std::move(graphics_pipeline),
+    wait_destination_stage_mask};
+
+  return r_ctx;
 }
