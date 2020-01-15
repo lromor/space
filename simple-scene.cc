@@ -252,7 +252,7 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
     std::move(
       device->allocateCommandBuffersUnique(
         vk::CommandBufferAllocateInfo(
-          r_ctx_.command_pool.get(),
+          command_pool.get(),
           vk::CommandBufferLevel::ePrimary, 1)).front());
 
   vk::Queue graphics_queue =

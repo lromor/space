@@ -198,7 +198,7 @@ static std::pair<std::vector<std::string>, std::vector<std::string>> GetEnabledL
       return {enabled_layers, enabled_extensions};
 }
 
-//#ifndef NDEBUG
+#ifndef NDEBUG
 VkBool32 DebugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
   VkDebugUtilsMessageTypeFlagsEXT message_types,
@@ -248,7 +248,7 @@ VkBool32 DebugUtilsMessengerCallback(
   return VK_TRUE;
 }
 
-//#endif
+#endif
 
 
 namespace vk {
