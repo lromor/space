@@ -12,6 +12,10 @@ struct Vertex {
 };
 
 
+struct Mesh {
+  std::vector<Vertex> vertices;
+  std::vector<uint16_t> indexes;
+};
 // Given an initialized vulkan context
 // perform a basic rendering of a static scene
 // where n meshes can be added dynamically
@@ -21,7 +25,8 @@ class StaticWireframeScene3D {
 public:
   StaticWireframeScene3D(vk::core::VkAppContext *context);
 
-  //void AddMesh();?
+  void AddMesh(const Mesh &mesh);
+
   //SetViewpoint?
 private:
 
@@ -54,6 +59,10 @@ private:
 
   struct Simple3DRenderingContext InitRenderingContext();
   Simple3DRenderingContext r_ctx_;
+
+  std::vector<vk::core::BufferData> vertex_buffer_data_;
+  std::vector<vk::core::BufferData> index_buffer_data_;
+
 
   vk::UniqueSemaphore image_acquired_;
   vk::UniqueFence fence_;

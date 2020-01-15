@@ -342,3 +342,20 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
 
   return r_ctx;
 }
+
+void StaticWireframeScene3D::AddMesh(const Mesh &mesh) {
+
+  // vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
+  // vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  // vk::UniqueDevice &device = vk_ctx_->device;
+
+  // const vertex_size = sizeof(std::vector<int>) + (sizeof(int) * MyVector.size())
+  // // Create the index and vertex buffer
+  // vertex_buffer_data_.push_back(
+  //   std::move(vk::core::BuffferData(
+  //              physical_device, device, , vk::BufferUsageFlagBits::eVertexBuffer)));
+
+  // // Submit them to the device
+  // vk::core::copyToDevice(device, vertexBufferData.deviceMemory, coloredCubeData, sizeof(coloredCubeData) / sizeof(coloredCubeData[0]));
+  
+}
