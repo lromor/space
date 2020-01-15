@@ -307,18 +307,16 @@ StaticWireframeScene3D::Simple3DRenderingContext &&StaticWireframeScene3D::InitR
     device, descriptor_set,
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
 
-
-
   vk::UniqueShaderModule vertex =
     device->createShaderModuleUnique(
       vk::ShaderModuleCreateInfo(
-        vk::ShaderModuleCreateFlags(), sizeof(simple_frag), simple_vert));
+        vk::ShaderModuleCreateFlags(), sizeof(simple_vert), simple_vert));
 
 
   vk::UniqueShaderModule frag =
     device->createShaderModuleUnique(
       vk::ShaderModuleCreateInfo(
-        vk::ShaderModuleCreateFlags(), sizeof(simple_vert), simple_frag));
+        vk::ShaderModuleCreateFlags(), sizeof(simple_frag), simple_frag));
 
   vk::UniquePipelineCache pipelineCache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
