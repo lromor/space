@@ -1,4 +1,5 @@
 
+#include <iostream>
 #include <optional>
 #include <vulkan/vulkan.hpp>
 #include <X11/Xlib.h>
@@ -129,18 +130,167 @@ std::optional<vk::PresentModeKHR> PickPresentMode(
   return picked_mode;
 }
 
+static std::pair<std::vector<std::string>, std::vector<std::string>> GetEnabledLayersAndExtensions(
+  std::vector<std::string> instance_layers, std::vector<std::string> instance_extensions) {
+      std::vector<vk::LayerProperties> layer_properties = vk::enumerateInstanceLayerProperties();
+      std::vector<vk::ExtensionProperties> extension_properties = vk::enumerateInstanceExtensionProperties();
+
+      std::vector<std::string> enabled_layers;
+      enabled_layers.reserve(instance_layers.size());
+      for (auto const& layer : instance_layers) {
+        assert(
+          std::find_if(
+            layer_properties.begin(), layer_properties.end(),
+            [layer](vk::LayerProperties const& lp) {
+              return layer == lp.layerName;
+            }) != layer_properties.end());
+        enabled_layers.push_back(layer.data());
+      }
+
+#ifndef NDEBUG
+      // Enable standard validation layer to find as much errors as possible!
+      if (std::find(
+            instance_layers.begin(), instance_layers.end(),
+            "VK_LAYER_KHRONOS_validation") == instance_layers.end()
+          && std::find_if(
+            layer_properties.begin(), layer_properties.end(),
+            [](vk::LayerProperties const& lp) {
+              return (strcmp("VK_LAYER_KHRONOS_validation", lp.layerName) == 0);
+            }) != layer_properties.end()) {
+        enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
+      }
+      if (std::find(
+            instance_layers.begin(), instance_layers.end(),
+            "VK_LAYER_LUNARG_assistant_layer") == instance_layers.end()
+          && std::find_if(
+            layer_properties.begin(), layer_properties.end(),
+            [](vk::LayerProperties const& lp) {
+              return (strcmp("VK_LAYER_LUNARG_assistant_layer", lp.layerName) == 0);
+            }) != layer_properties.end()) {
+        enabled_layers.push_back("VK_LAYER_LUNARG_assistant_layer");
+      }
+#endif
+
+      std::vector<std::string> enabled_extensions;
+      enabled_extensions.reserve(instance_extensions.size());
+      for (auto const& ext : instance_extensions) {
+        assert(
+          std::find_if(
+            extension_properties.begin(), extension_properties.end(),
+            [ext](vk::ExtensionProperties const& ep) {
+              return ext == ep.extensionName;
+            }) != extension_properties.end());
+        enabled_extensions.push_back(ext.data());
+      }
+
+#ifndef NDEBUG
+      if (std::find(
+            instance_extensions.begin(), instance_extensions.end(),
+            VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == instance_extensions.end()
+          && std::find_if(
+            extension_properties.begin(), extension_properties.end(),
+            [](vk::ExtensionProperties const& ep) {
+              return (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, ep.extensionName) == 0);
+            }) != extension_properties.end()) {
+        enabled_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+      }
+#endif
+      return {enabled_layers, enabled_extensions};
+}
+
+//#ifndef NDEBUG
+VkBool32 DebugUtilsMessengerCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+  VkDebugUtilsMessageTypeFlagsEXT message_types,
+  VkDebugUtilsMessengerCallbackDataEXT const *p_callback_data, void *) {
+  std::cerr << vk::to_string(
+    static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(message_severity))
+            << ": " << vk::to_string(
+              static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(message_types)) << ":\n";
+  std::cerr << "\t" << "messageIDName   = <"
+            << p_callback_data->pMessageIdName << ">\n";
+  std::cerr << "\t" << "messageIdNumber = "
+            << p_callback_data->messageIdNumber << "\n";
+  std::cerr << "\t" << "message         = <"
+            << p_callback_data->pMessage << ">\n";
+
+  if (0 < p_callback_data->queueLabelCount) {
+    std::cerr << "\t" << "Queue Labels:\n";
+    for (uint8_t i = 0; i < p_callback_data->queueLabelCount; i++) {
+      std::cerr << "\t\t" << "labelName = <"
+                << p_callback_data->pQueueLabels[i].pLabelName << ">\n";
+    }
+  }
+
+  if (0 < p_callback_data->cmdBufLabelCount) {
+    std::cerr << "\t" << "CommandBuffer Labels:\n";
+    for (uint8_t i = 0; i < p_callback_data->cmdBufLabelCount; i++) {
+      std::cerr << "\t\t" << "labelName = <"
+                << p_callback_data->pCmdBufLabels[i].pLabelName << ">\n";
+    }
+  }
+  if (0 < p_callback_data->objectCount) {
+    std::cerr << "\t" << "Objects:\n";
+    for (uint8_t i = 0; i < p_callback_data->objectCount; i++) {
+      std::cerr << "\t\t" << "Object "
+                << i << "\n";
+      std::cerr << "\t\t\t" << "objectType   = "
+                << vk::to_string(
+                  static_cast<vk::ObjectType>(p_callback_data->pObjects[i].objectType)) << "\n";
+      std::cerr << "\t\t\t" << "objectHandle = "
+                << p_callback_data->pObjects[i].objectHandle << "\n";
+      if (p_callback_data->pObjects[i].pObjectName) {
+        std::cerr << "\t\t\t" << "objectName   = <"
+                  << p_callback_data->pObjects[i].pObjectName << ">\n";
+      }
+    }
+  }
+  return VK_TRUE;
+}
+
+//#endif
+
+
 namespace vk {
   namespace core {
 
-    std::optional<VkAppContext> InitVulkan(const VkAppConfig config, Display *display, Window window) {
+    std::optional<VkAppContext> InitVulkan(
+      const VkAppConfig config, Display *display, Window window) {
+      auto res = GetEnabledLayersAndExtensions(config.instance_layers, config.instance_extensions);
+      std::vector<const char*> enabled_instance_layers;
+      std::vector<const char*> enabled_instance_extensions;
+      for (auto &l : res.first)
+        enabled_instance_layers.push_back(l.c_str());
+      for (auto &e : res.second)
+        enabled_instance_extensions.push_back(e.c_str());
+
       vk::ApplicationInfo application_info(
         config.app_name, 1, config.engine_name, 1, VK_API_VERSION_1_1);
 
       vk::InstanceCreateInfo instance_create_info(
-        {}, &application_info, config.instance_layers.size(), config.instance_layers.data(),
-        config.instance_extensions.size(), config.instance_extensions.data());
+        {}, &application_info, checked_cast<uint32_t>(enabled_instance_layers.size()),
+        enabled_instance_layers.data(),
+        checked_cast<uint32_t>(enabled_instance_extensions.size()),
+        enabled_instance_extensions.data());
 
       vk::UniqueInstance instance = vk::createInstanceUnique(instance_create_info);
+
+#ifndef NDEBUG
+      static vk::DispatchLoaderDynamic dl(*instance);
+      vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning
+        | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
+      vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
+        vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral
+        | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance
+        | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
+
+      auto debug_utils_messenger =
+        instance->createDebugUtilsMessengerEXTUnique(
+          vk::DebugUtilsMessengerCreateInfoEXT(
+            {}, severityFlags, messageTypeFlags,
+            &DebugUtilsMessengerCallback), nullptr, dl);
+#endif
 
       // For now we just pick the first device. We should improve the code by
       // searching for the device that has best properties or any other policy
@@ -162,7 +312,8 @@ namespace vk {
 
       // Find devices for present and graphics.
       std::pair<uint32_t, uint32_t> graphics_and_present_queue_family_index;
-      if (const auto o = FindGraphicsAndPresentQueueFamilyIndex(physical_device, *surface_data.surface)) {
+      if (const auto o = FindGraphicsAndPresentQueueFamilyIndex(
+            physical_device, *surface_data.surface)) {
         graphics_and_present_queue_family_index = o.value();
       } else {
         fprintf(stderr, "Couldn't find suitable Present or Graphics queues.");

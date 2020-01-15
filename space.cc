@@ -10,10 +10,18 @@
 
 int main(int argc, char *argv[]) {
 
-  const struct vk::core::VkAppConfig config = {
-    "Space", "SpaceEngine", {},
-    {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_EXTENSION_NAME}};
-
+#ifndef NDEBUG
+  std::cout << "Debug mode on" << std::endl;
+    const struct vk::core::VkAppConfig config = {
+      "Space", "SpaceEngine", {
+        "VK_LAYER_LUNARG_standard_validation" },
+      { VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_XLIB_SURFACE_EXTENSION_NAME }};
+#else
+    const struct vk::core::VkAppConfig config = {
+      "Space", "SpaceEngine", {},
+      {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_EXTENSION_NAME}};
+#endif
   const unsigned kWidth = 1024;
   const unsigned kHeight = 768;
 

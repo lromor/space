@@ -11,6 +11,21 @@ inline constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
   return v < lo ? lo : hi < v ? hi : v;
 }
 
+template <typename TargetType, typename SourceType>
+VULKAN_HPP_INLINE TargetType checked_cast(SourceType value) {
+  static_assert(
+    sizeof(TargetType) <= sizeof(SourceType),
+    "No need to cast from smaller to larger type!");
+  static_assert(
+    !std::numeric_limits<TargetType>::is_signed,
+    "Only unsigned types supported!");
+  static_assert(
+    !std::numeric_limits<SourceType>::is_signed,
+    "Only unsigned types supported!");
+  assert(value <= std::numeric_limits<TargetType>::max());
+  return static_cast<TargetType>(value);
+}
+
 namespace vk {
   namespace core {
     // Vulkan initialization routines
@@ -22,8 +37,8 @@ namespace vk {
     struct VkAppConfig {
       const char *app_name;
       const char *engine_name;
-      std::vector<const char*> instance_layers;
-      std::vector<const char*> instance_extensions;
+      std::vector<std::string> instance_layers;
+      std::vector<std::string> instance_extensions;
     };
 
     struct VkAppContext {
