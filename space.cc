@@ -100,7 +100,9 @@ int main(int argc, char *argv[]) {
     for (;;) {
       XNextEvent(display, &e);
       if (e.type == KeyPress)
-         break;
+        break;
+      scene.SubmitRendering();
+      scene.Present();
    }
   }
  

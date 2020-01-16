@@ -27,6 +27,9 @@ public:
 
   void AddMesh(const Mesh &mesh);
 
+  void SubmitRendering();
+  void Present();
+
   //SetViewpoint?
 private:
 
@@ -62,10 +65,11 @@ private:
 
   std::vector<vk::core::BufferData> vertex_buffer_data_;
   std::vector<vk::core::BufferData> index_buffer_data_;
-
+  std::vector<Mesh> meshes_;
 
   vk::UniqueSemaphore image_acquired_;
-  vk::UniqueFence fence_;
+  uint32_t current_buffer_;
+  vk::UniqueFence draw_fence_;
 };
 
 #endif // __SIMPLE_SCENE_H_

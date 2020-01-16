@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <iostream>
 #include <optional>
 #include <X11/Xlib.h>
@@ -12,6 +13,7 @@
 #include "shaders/simple.frag.h"
 #include "shaders/simple.vert.h"
 
+#define FENCE_TIMEOUT 100000000
 
 static vk::UniqueDescriptorPool createDescriptorPool(
   vk::UniqueDevice &device, std::vector<vk::DescriptorPoolSize> const& poolSizes) {
@@ -233,7 +235,8 @@ vk::UniquePipeline CreateGraphicsPipeline(
 StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
     image_acquired_(vk_ctx->device->createSemaphoreUnique(vk::SemaphoreCreateInfo())),
-    fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())) {}
+    current_buffer_(0),
+    draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())) {}
 
 StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
@@ -345,17 +348,105 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
 
 void StaticWireframeScene3D::AddMesh(const Mesh &mesh) {
 
-  // vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
-  // vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
-  // vk::UniqueDevice &device = vk_ctx_->device;
+  vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
+  vk::UniqueDevice &device = vk_ctx_->device;
 
-  // const vertex_size = sizeof(std::vector<int>) + (sizeof(int) * MyVector.size())
-  // // Create the index and vertex buffer
-  // vertex_buffer_data_.push_back(
-  //   std::move(vk::core::BuffferData(
-  //              physical_device, device, , vk::BufferUsageFlagBits::eVertexBuffer)));
+  const unsigned int nvertices = mesh.vertices.size();
 
-  // // Submit them to the device
-  // vk::core::copyToDevice(device, vertexBufferData.deviceMemory, coloredCubeData, sizeof(coloredCubeData) / sizeof(coloredCubeData[0]));
-  
+  // Create the index and vertex buffer
+  vertex_buffer_data_.push_back(
+    vk::core::BufferData(
+      physical_device, device, nvertices * sizeof(Vertex),
+      vk::BufferUsageFlagBits::eVertexBuffer));
+
+  const auto &vertex_data = vertex_buffer_data_.back();
+  // Submit them to the device
+  vk::core::CopyToDevice(device, vertex_data.deviceMemory, mesh.vertices.data(), nvertices);
+
+  const unsigned int nindexes = mesh.indexes.size();
+  index_buffer_data_.push_back(
+    vk::core::BufferData(
+      physical_device, device, nindexes * sizeof(Vertex),
+      vk::BufferUsageFlagBits::eIndexBuffer));
+
+  const auto &index_data = index_buffer_data_.back();
+
+  // Submit them to the device
+  vk::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nvertices);
+  meshes_.push_back(mesh);
+}
+
+
+void StaticWireframeScene3D::SubmitRendering() {
+  const vk::UniqueDevice &device = vk_ctx_->device;
+  const vk::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
+  const vk::Queue &graphics_queue = r_ctx_.graphics_queue;
+  const vk::UniqueCommandBuffer &command_buffer = r_ctx_.command_buffer;
+  const vk::UniqueRenderPass &render_pass = r_ctx_.render_pass;
+  const std::vector<vk::UniqueFramebuffer> &framebuffers = r_ctx_.framebuffers;
+  const vk::UniquePipeline &graphics_pipeline = r_ctx_.graphics_pipeline;
+  const vk::UniquePipelineLayout &pipeline_layout = r_ctx_.pipeline_layout;
+  const vk::UniqueDescriptorSet &descriptor_set = r_ctx_.descriptor_set;
+  const vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+
+  // Get the index of the next available swapchain image:
+  vk::UniqueSemaphore imageAcquiredSemaphore = device->createSemaphoreUnique(vk::SemaphoreCreateInfo());
+  vk::ResultValue<uint32_t> res =
+    device->acquireNextImageKHR(
+      swap_chain_data.swap_chain.get(), FENCE_TIMEOUT,
+      imageAcquiredSemaphore.get(), nullptr);
+  assert(res.result == vk::Result::eSuccess);
+  assert(res.value < r_ctx_.framebuffers.size());
+  current_buffer_ = res.value;
+
+  command_buffer->begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlags()));
+
+  vk::ClearValue clear_values[2];
+  clear_values[0].color =
+    vk::ClearColorValue(std::array<float, 4>({ 0.2f, 0.2f, 0.2f, 0.2f }));
+  clear_values[1].depthStencil =
+    vk::ClearDepthStencilValue(1.0f, 0);
+  vk::RenderPassBeginInfo renderPassBeginInfo(
+    render_pass.get(), framebuffers[current_buffer_].get(),
+    vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent), 2, clear_values);
+
+  command_buffer->beginRenderPass(
+    renderPassBeginInfo, vk::SubpassContents::eInline);
+  command_buffer->bindPipeline(
+    vk::PipelineBindPoint::eGraphics, graphics_pipeline.get());
+  command_buffer->bindDescriptorSets(
+    vk::PipelineBindPoint::eGraphics, pipeline_layout.get(), 0, descriptor_set.get(), nullptr);
+
+  command_buffer->bindVertexBuffers(0, *vertex_buffer_data_.back().buffer, {0});
+  command_buffer->bindIndexBuffer(*index_buffer_data_.back().buffer, 0, vk::IndexType::eUint16);
+
+  command_buffer->setViewport(
+    0, vk::Viewport(
+      0.0f, 0.0f,
+      static_cast<float>(surface_data.extent.width),
+      static_cast<float>(surface_data.extent.height), 0.0f, 1.0f));
+  command_buffer->setScissor(
+    0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
+
+  command_buffer->draw(12 * 3, 1, 0, 0);
+  command_buffer->endRenderPass();
+  command_buffer->end();
+
+  device->resetFences(1, &draw_fence_.get());
+  vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+  vk::SubmitInfo submitInfo(1, &imageAcquiredSemaphore.get(), &waitDestinationStageMask, 1, &command_buffer.get());
+  graphics_queue.submit(submitInfo, draw_fence_.get());
+
+
+}
+
+void StaticWireframeScene3D::Present() {
+  vk::UniqueDevice &device = vk_ctx_->device;
+  vk::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
+  vk::Queue &present_queue = r_ctx_.present_queue;
+
+  while (vk::Result::eTimeout
+         == device->waitForFences(draw_fence_.get(), VK_TRUE, FENCE_TIMEOUT)) { usleep(1000); }
+  present_queue.presentKHR(
+    vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
 }
