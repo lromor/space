@@ -18,19 +18,28 @@
 */
 
 
+/*
+ * 1 --- 0
+ * |     |
+ * |     |
+ * 2 --- 3
+ */
 static const std::vector<Vertex> cube_vertices = {
   // X, Y, Z, W
   // Lower vertices
-  {-1.0f, -1.0f,  1.0f, 1.0f}, // 0
-  { 1.0f, -1.0f,  1.0f, 1.0f}, // 1
-  { 1.0f, -1.0f, -1.0f, 1.0f}, // 2
-  {-1.0f, -1.0f, -1.0f, 1.0f}, // 3
+  { 1.0f,  1.0f,  0.0f, 1.0f}, // 0
+  {-1.0f,  1.0f,  0.0f, 1.0f}, // 1
+  {-1.0f,  -1.0f,  0.0f, 1.0f}, // 2
 
-  // Upper vertices
-  {-1.0f,  1.0f,  1.0f, 1.0f}, // 4
-  { 1.0f,  1.0f,  1.0f, 1.0f}, // 5
-  { 1.0f,  1.0f, -1.0f, 1.0f}, // 6
-  {-1.0f,  1.0f, -1.0f, 1.0f}, // 7
+  { 1.0f,  1.0f,  0.0f, 1.0f}, // 0
+  {-1.0f,  -1.0f,  0.0f, 1.0f}, // 2
+  { 1.0f,  -1.0f,  0.0f, 1.0f} // 3
+
+  // // Upper vertices
+  // { 1.0f,  1.0f,  1.0f, 1.0f}, // 5
+  // {-1.0f,  1.0f,  1.0f, 1.0f}, // 4
+  // { 1.0f,  1.0f, -1.0f, 1.0f}, // 6
+  // {-1.0f,  1.0f, -1.0f, 1.0f}, // 7
 };
 
 
@@ -39,18 +48,8 @@ static const std::vector<Vertex> cube_vertices = {
 // In this case we are using clockwise indices to define the face.
 // See https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFrontFace.html
 static const std::vector<uint16_t> cube_indexes = {
-  0, 4, 1,
-  1, 4, 5,
-  1, 5, 2,
-  2, 5, 6,
-  2, 3, 6,
-  6, 3, 7,
-  3, 7, 4,
-  0, 3, 4,
-  4, 7, 5,
-  5, 7, 6,
-  0, 3, 1,
-  1, 3, 2
+  2, 1, 3,
+  3, 1, 0
 };
 
 
