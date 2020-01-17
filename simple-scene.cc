@@ -234,7 +234,6 @@ vk::UniquePipeline CreateGraphicsPipeline(
 
 StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
-    image_acquired_(vk_ctx->device->createSemaphoreUnique(vk::SemaphoreCreateInfo())),
     current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())) {}
 
@@ -398,7 +397,6 @@ void StaticWireframeScene3D::SubmitRendering() {
   assert(res.result == vk::Result::eSuccess);
   assert(res.value < r_ctx_.framebuffers.size());
   current_buffer_ = res.value;
-
   command_buffer->begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlags()));
 
   vk::ClearValue clear_values[2];

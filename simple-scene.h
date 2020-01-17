@@ -67,7 +67,6 @@ private:
   std::vector<vk::core::BufferData> index_buffer_data_;
   std::vector<Mesh> meshes_;
 
-  vk::UniqueSemaphore image_acquired_;
   uint32_t current_buffer_;
   vk::UniqueFence draw_fence_;
 };

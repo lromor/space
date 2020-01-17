@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <optional>
+#include <stdlib.h>
 #include <X11/Xlib.h>
 #include <vulkan/vulkan.hpp>
 
@@ -74,6 +75,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Couldn't open display.");
     return 1;
   }
+
+  int x11_fd = ConnectionNumber(display);
   int screen = XDefaultScreen(display);
   Window root_window = XRootWindow(display, screen);
   Window window = XCreateSimpleWindow(
@@ -88,6 +91,8 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // We the scene shouldn't be destroyed after we close the
+  // display.
   {
     StaticWireframeScene3D scene(&vk_ctx);
 
@@ -96,11 +101,34 @@ int main(int argc, char *argv[]) {
 
     XSelectInput(display, window, ExposureMask | KeyPressMask);
     XMapWindow(display, window);
+
+    struct timeval timeout;
+    fd_set read_fds;
     XEvent e;
+    bool exit = false;
+
     for (;;) {
-      XNextEvent(display, &e);
-      if (e.type == KeyPress)
-        break;
+
+      FD_ZERO(&read_fds);
+      FD_SET(x11_fd, &read_fds);
+
+      timeout.tv_usec = 1000;
+      timeout.tv_sec = 0;
+      int fds_ready = select(x11_fd + 1, &read_fds, NULL, NULL, &timeout);
+
+      if (fds_ready < 0) {
+        perror("select() failed");
+        return 1;
+      }
+
+      while(XPending(display)) {
+        XNextEvent(display, &e);
+        if (e.type == KeyPress)
+          exit = true;
+      }
+
+      if (exit) break;
+
       scene.SubmitRendering();
       scene.Present();
    }
