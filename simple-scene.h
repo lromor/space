@@ -1,10 +1,15 @@
 #ifndef __SIMPLE_SCENE_H_
 #define __SIMPLE_SCENE_H_
 
+#include <iostream>
 #include <vulkan/vulkan.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 
 #include "vulkan-core.h"
-
+#include "gamepad.h"
 
 
 struct Vertex {
@@ -16,6 +21,19 @@ struct Mesh {
   std::vector<Vertex> vertices;
   std::vector<uint16_t> indexes;
 };
+
+struct CameraControls {
+  CameraControls() = default;
+  CameraControls operator+(const CameraControls &b) const {
+    return CameraControls{
+      dx + b.dx, dy + b.dy, dz + b.dz,
+        dphi + b.dphi, dtheta + b.dtheta};
+  }
+  float dx, dy, dz;
+  float dphi, dtheta;
+};
+
+
 // Given an initialized vulkan context
 // perform a basic rendering of a static scene
 // where n meshes can be added dynamically
@@ -26,7 +44,7 @@ public:
   StaticWireframeScene3D(vk::core::VkAppContext *context);
 
   void AddMesh(const Mesh &mesh);
-
+  void Input(CameraControls &input);
   void SubmitRendering();
   void Present();
 
@@ -69,6 +87,25 @@ private:
 
   uint32_t current_buffer_;
   vk::UniqueFence draw_fence_;
+
+
+  struct Camera {
+    glm::vec3 eye; // Camera position.
+    glm::vec3 center; // Looking point.
+    glm::vec3 up; // Camera vertical axis.
+  };
+  struct Camera camera_;
+
+  struct Projection {
+    float fov;
+    glm::mat4x4 model;
+    glm::mat4x4 view;
+    glm::mat4x4 projection;
+    glm::mat4x4 clip;
+  };
+
+  struct Projection projection_matrices_;
+  struct Projection UpdateProjectionMatrices();
 };
 
 #endif // __SIMPLE_SCENE_H_

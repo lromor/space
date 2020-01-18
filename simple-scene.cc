@@ -3,10 +3,14 @@
 #include <optional>
 #include <X11/Xlib.h>
 #include <vulkan/vulkan.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
- #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
+#include <glm/glm.hpp> //vec3, vec4, ivec4, mat4
+#include <glm/gtc/matrix_transform.hpp> //translate, rotate, scale, perspective
+#include <glm/gtc/type_ptr.hpp> //value_ptr
+#include <glm/gtx/rotate_vector.hpp>
+
 #include <numeric>
 
 #include "vulkan-core.h"
@@ -128,31 +132,6 @@ static std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
   return picked_format;
 }
 
-static glm::mat4x4 CreateModelViewProjectionClipMatrix(vk::Extent2D const& extent) {
-  float fov = glm::radians(45.0f);
-  if (extent.width > extent.height) {
-    fov *= static_cast<float>(extent.height) / static_cast<float>(extent.width);
-  }
-
-  glm::mat4x4 model =
-    glm::mat4x4(1.0f,  0.0f, 0.0f, 0.0f,
-                0.0f,  1.0f, 0.0f, 0.0f,
-                0.0f,  0.0f, 1.0f, 0.0f,
-                0.0f,  0.0f, 0.0f, 1.0f);   // vulkan clip space has inverted y and half z !
- 
-  glm::mat4x4 view =
-    glm::lookAt(glm::vec3(-5.0f, 3.0f, -10.0f), glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(0.0f, -1.0f, 0.0f));
-  glm::mat4x4 projection
-    = glm::perspective(fov, 1.0f, 0.1f, 100.0f);
-  glm::mat4x4 clip =
-    glm::mat4x4(1.0f,  0.0f, 0.0f, 0.0f,
-                0.0f, -1.0f, 0.0f, 0.0f,
-                0.0f,  0.0f, 0.5f, 0.0f,
-                0.0f,  0.0f, 0.5f, 1.0f);   // vulkan clip space has inverted y and half z !
-  return clip * projection * view * model;
-}
-
 vk::UniquePipeline CreateGraphicsPipeline(
   vk::UniqueDevice const& device, vk::UniquePipelineCache const& pipelineCache,
   std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& vertexShaderData,
@@ -199,7 +178,7 @@ vk::UniquePipeline CreateGraphicsPipeline(
 
   vk::PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo(
     vk::PipelineRasterizationStateCreateFlags(), false, false,
-    vk::PolygonMode::eLine, vk::CullModeFlagBits::eBack,
+    vk::PolygonMode::eLine, vk::CullModeFlagBits::eNone,
     frontFace, false, 0.0f, 0.0f, 0.0f, 1.0f);
 
   vk::PipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo(
@@ -243,7 +222,9 @@ vk::UniquePipeline CreateGraphicsPipeline(
 StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
     current_buffer_(0),
-    draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())) {}
+    draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
+    camera_{glm::vec3(0.0f, 2.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
+    projection_matrices_(UpdateProjectionMatrices()) {}
 
 StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
@@ -282,10 +263,6 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
   vk::core::BufferData uniform_buffer_data(
     physical_device, device, sizeof(glm::mat4x4),
     vk::BufferUsageFlagBits::eUniformBuffer);
-
-  vk::core::CopyToDevice(
-    device, uniform_buffer_data.deviceMemory,
-    CreateModelViewProjectionClipMatrix(surface_data.extent));
 
   vk::UniqueDescriptorSetLayout descriptor_set_layout =
     vk::core::CreateDescriptorSetLayout(
@@ -395,6 +372,16 @@ void StaticWireframeScene3D::SubmitRendering() {
   const vk::UniquePipelineLayout &pipeline_layout = r_ctx_.pipeline_layout;
   const vk::UniqueDescriptorSet &descriptor_set = r_ctx_.descriptor_set;
   const vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  const vk::core::BufferData &uniform_buffer_data = r_ctx_.uniform_buffer_data;
+
+  // Update the projection matrices with the current values of camera, model, fov, etc..
+  projection_matrices_ = UpdateProjectionMatrices();
+ 
+  // Update uniform buffer
+  vk::core::CopyToDevice(
+    device, uniform_buffer_data.deviceMemory,  projection_matrices_.clip
+    * projection_matrices_.projection * projection_matrices_.view * projection_matrices_.model);
+
 
   // Get the index of the next available swapchain image:
   vk::UniqueSemaphore imageAcquiredSemaphore = device->createSemaphoreUnique(vk::SemaphoreCreateInfo());
@@ -455,4 +442,48 @@ void StaticWireframeScene3D::Present() {
          == device->waitForFences(draw_fence_.get(), VK_TRUE, FENCE_TIMEOUT)) { usleep(1000); }
   present_queue.presentKHR(
     vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
+}
+
+
+struct StaticWireframeScene3D::Projection StaticWireframeScene3D::UpdateProjectionMatrices() {
+
+  vk::Extent2D &extent = vk_ctx_->surface_data.extent;
+
+  float fov = glm::radians(45.0f);
+  if (extent.width > extent.height) {
+    fov *= static_cast<float>(extent.height) / static_cast<float>(extent.width);
+  }
+  glm::mat4x4 model = glm::mat4x4(1.0f);
+  glm::mat4x4 view = glm::lookAt(camera_.eye, camera_.center, camera_.up);
+  glm::mat4x4 projection = glm::perspective(fov, 1.0f, 0.1f, 100.0f);
+  glm::mat4x4 clip =
+    glm::mat4x4(1.0f,  0.0f, 0.0f, 0.0f,
+                0.0f, -1.0f, 0.0f, 0.0f,
+                0.0f,  0.0f, 0.5f, 0.0f,
+                0.0f,  0.0f, 0.5f, 1.0f);   // vulkan clip space has inverted y and half z !
+  return Projection{ fov, model, view, projection, clip };
+}
+
+void StaticWireframeScene3D::Input(CameraControls &input) {
+  // camera basis
+  glm::vec3 nx = glm::normalize(camera_.center - camera_.eye); // front
+  glm::vec3 nz = glm::normalize(glm::cross(-nx, glm::vec3(0.0f, 1.0f, 0.0f))); // side
+  glm::vec3 ny = glm::normalize(glm::cross(nx, nz)); // up
+ 
+  // We want to keep fixed the distance between center and eye.
+  auto t = input.dy * 0.01f * nx - input.dx * 0.005f * nz;
+  camera_.center += t;
+  camera_.eye += t;
+  camera_.up = ny;
+
+  // Rotate w.r.t ny camera center.
+  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dphi * 0.001f, -ny);
+  camera_.center = transform * (glm::vec4(camera_.center - camera_.eye, 1.0));
+  camera_.center += camera_.eye;
+
+
+  // Rotate w.r.t nz camera center.
+  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dtheta * 0.001f, -nz);
+  camera_.center = transform2 * (glm::vec4(camera_.center - camera_.eye, 1.0));
+  camera_.center += camera_.eye;
 }

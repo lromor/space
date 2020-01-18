@@ -1,9 +1,10 @@
 CXX=g++
 
 CFLAGS=-g -O0 -Wall -DVK_USE_PLATFORM_XLIB_KHR -std=c++17
-LD_FLAGS=-lvulkan -lX11
+CFLAGS+=-I/usr/include/libevdev-1.0
+LD_FLAGS=-lvulkan -lX11 -levdev
 
-OBJECTS=vulkan-core.o vulkan-rendering.o simple-scene.o
+OBJECTS=vulkan-core.o vulkan-rendering.o simple-scene.o gamepad.o
 MAIN_OBJECTS=space.o
 
 DEPENDENCY_RULES=$(OBJECTS:=.d) $(MAIN_OBJECTS:=.d)
