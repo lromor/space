@@ -138,7 +138,7 @@ void Gamepad::Impl::ReadEvents() {
   struct input_event event;
   int rc, flag = LIBEVDEV_READ_FLAG_NORMAL;
   struct EventData data;
-  while ((rc = libevdev_next_event(dev_, LIBEVDEV_READ_FLAG_NORMAL, &event))
+  while ((rc = libevdev_next_event(dev_, flag, &event))
          != -EAGAIN) {
     if (event.type == EV_SYN
         && event.code == SYN_DROPPED) {
@@ -153,7 +153,7 @@ void Gamepad::Impl::ReadEvents() {
     // Everything else is mapped, and make a call
     // to the callbacks. We don't want to lose any
     // event otherwise we might experience some
-    // "drifting" of some sort.
+    // "drifting".
     clbk_(data);
   }
 }

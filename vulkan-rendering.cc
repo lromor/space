@@ -199,10 +199,13 @@ namespace vk {
         device, stagingBuffer.deviceMemory, data.data(),
         data.size(), elementSize);
 
-      OneTimeSubmit(device, commandPool, queue,
-                    [&](vk::UniqueCommandBuffer const& commandBuffer) {
-                      commandBuffer->copyBuffer(*stagingBuffer.buffer, *this->buffer, vk::BufferCopy(0, 0, dataSize));
-                    });
+      OneTimeSubmit(
+        device, commandPool, queue,
+        [&](vk::UniqueCommandBuffer const& commandBuffer) {
+          commandBuffer->copyBuffer(
+            *stagingBuffer.buffer, *this->buffer,
+            vk::BufferCopy(0, 0, dataSize));
+        });
     }
 
     ImageData::ImageData(
@@ -211,57 +214,60 @@ namespace vk {
       vk::ImageUsageFlags usage, vk::ImageLayout initial_layout,
       vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask)
       : format(format) {
-      vk::ImageCreateInfo imageCreateInfo(
+      vk::ImageCreateInfo image_create_info(
         vk::ImageCreateFlags(), vk::ImageType::e2D, format, vk::Extent3D(extent, 1), 1, 1,
         vk::SampleCountFlagBits::e1, tiling, usage | vk::ImageUsageFlagBits::eSampled,
         vk::SharingMode::eExclusive, 0, nullptr, initial_layout);
-      image = device->createImageUnique(imageCreateInfo);
-      device_memory = AllocateMemory(device, physical_device.getMemoryProperties(),
-                                     device->getImageMemoryRequirements(image.get()), memory_properties);
+      image = device->createImageUnique(image_create_info);
+      device_memory = AllocateMemory(
+        device, physical_device.getMemoryProperties(),
+        device->getImageMemoryRequirements(image.get()), memory_properties);
       device->bindImageMemory(image.get(), device_memory.get(), 0);
       vk::ComponentMapping component_mapping(
         vk::ComponentSwizzle::eR, vk::ComponentSwizzle::eG, vk::ComponentSwizzle::eB,
         vk::ComponentSwizzle::eA);
-      vk::ImageViewCreateInfo imageViewCreateInfo(
+      vk::ImageViewCreateInfo image_view_create_info(
         vk::ImageViewCreateFlags(), image.get(), vk::ImageViewType::e2D,
         format, component_mapping, vk::ImageSubresourceRange(aspect_mask, 0, 1, 0, 1));
-      image_view = device->createImageViewUnique(imageViewCreateInfo);
+      image_view = device->createImageViewUnique(image_view_create_info);
     }
 
     vk::UniqueDeviceMemory AllocateMemory(
       vk::UniqueDevice const& device,
-      vk::PhysicalDeviceMemoryProperties const& memoryProperties,
-      vk::MemoryRequirements const& memoryRequirements,
-      vk::MemoryPropertyFlags memoryPropertyFlags) {
-      uint32_t memoryTypeIndex = FindMemoryType(
-        memoryProperties, memoryRequirements.memoryTypeBits, memoryPropertyFlags);
+      vk::PhysicalDeviceMemoryProperties const& memory_properties,
+      vk::MemoryRequirements const& memory_requirements,
+      vk::MemoryPropertyFlags memory_property_flags) {
+      uint32_t memory_type_index = FindMemoryType(
+        memory_properties, memory_requirements.memoryTypeBits, memory_property_flags);
       return device->allocateMemoryUnique(
-        vk::MemoryAllocateInfo(memoryRequirements.size, memoryTypeIndex));
+        vk::MemoryAllocateInfo(memory_requirements.size, memory_type_index));
     }
 
     uint32_t FindMemoryType(
-      vk::PhysicalDeviceMemoryProperties const& memoryProperties,
-      uint32_t typeBits, vk::MemoryPropertyFlags requirementsMask) {
-      uint32_t typeIndex = uint32_t(~0);
-      for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++) {
-        if ((typeBits & 1) && ((memoryProperties.memoryTypes[i].propertyFlags & requirementsMask) == requirementsMask)) {
-          typeIndex = i;
+      vk::PhysicalDeviceMemoryProperties const& memory_properties,
+      uint32_t type_bits, vk::MemoryPropertyFlags requirements_mask) {
+      uint32_t type_index = uint32_t(~0);
+      for (uint32_t i = 0; i < memory_properties.memoryTypeCount; i++) {
+        if ((type_bits & 1)
+            && ((memory_properties.memoryTypes[i].propertyFlags & requirements_mask)
+                == requirements_mask)) {
+          type_index = i;
           break;
         }
-        typeBits >>= 1;
+        type_bits >>= 1;
       }
-      assert(typeIndex != ~0u);
-      return typeIndex;
+      assert(type_index != ~0u);
+      return type_index;
     }
 
     vk::UniqueDescriptorSetLayout CreateDescriptorSetLayout(
       vk::UniqueDevice const& device,
-      std::vector<std::tuple<vk::DescriptorType, uint32_t, vk::ShaderStageFlags>> const& bindingData,
+      std::vector<std::tuple<vk::DescriptorType,uint32_t, vk::ShaderStageFlags>> const& binding_data,
       vk::DescriptorSetLayoutCreateFlags flags) {
-      std::vector<vk::DescriptorSetLayoutBinding> bindings(bindingData.size());
-      for (size_t i = 0; i < bindingData.size(); i++) {
+      std::vector<vk::DescriptorSetLayoutBinding> bindings(binding_data.size());
+      for (size_t i = 0; i < binding_data.size(); i++) {
         bindings[i] = vk::DescriptorSetLayoutBinding(
-          i, std::get<0>(bindingData[i]), std::get<1>(bindingData[i]), std::get<2>(bindingData[i]));
+          i, std::get<0>(binding_data[i]), std::get<1>(binding_data[i]), std::get<2>(binding_data[i]));
       }
       return device->createDescriptorSetLayoutUnique(
         vk::DescriptorSetLayoutCreateInfo(flags, bindings.size(), bindings.data()));
@@ -284,7 +290,6 @@ namespace vk {
             *descriptor_set, dst_binding++, 0, 1, std::get<0>(bd), nullptr,
             &buffer_infos.back(), std::get<2>(bd) ? &*std::get<2>(bd) : nullptr));
       }
-      std::vector<vk::DescriptorImageInfo> imageInfos;
       device->updateDescriptorSets(write_descriptor_sets, nullptr);
     }
   }
