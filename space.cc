@@ -36,22 +36,27 @@ static void update_camera_controls(
   }
 }
 
+/*  6----7
+   /|   /|
+  3----2 |
+  | 5--|-4
+  |/   |/
+  0----1
+*/
+
 static const std::vector<Vertex> cube_vertices = {
   // X, Y, Z, W
-  // Lower vertices
-  { 1.0f,  0.0f, 1.0f, 1.0f}, // 0
-  {-1.0f,  0.0f, 1.0f,  1.0f}, // 1
-  {-1.0f,  0.0f, -1.0f, 1.0f}, // 2
+  // Front vertices
+  { -1.0f, -1.0f, -1.0f, 1.0f}, // 0
+  {  1.0f, -1.0f, -1.0f, 1.0f}, // 1
+  {  1.0f,  1.0f, -1.0f, 1.0f}, // 2
+  { -1.0f,  1.0f, -1.0f, 1.0f}, // 3
 
-  { 1.0f,  0.0f, 1.0f,  1.0f}, // 0
-  {-1.0f,  0.0f, -1.0f, 1.0f}, // 2
-  { 1.0f,  0.0f, -1.0f, 1.0f} // 3
-
-  // // Upper vertices
-  // { 1.0f,  1.0f,  1.0f, 1.0f}, // 5
-  // {-1.0f,  1.0f,  1.0f, 1.0f}, // 4
-  // { 1.0f,  1.0f, -1.0f, 1.0f}, // 6
-  // {-1.0f,  1.0f, -1.0f, 1.0f}, // 7
+  // Back vertices
+  {  1.0f, -1.0f,  1.0f, 1.0f}, // 4
+  { -1.0f, -1.0f,  1.0f, 1.0f}, // 5
+  { -1.0f,  1.0f,  1.0f, 1.0f}, // 6
+  {  1.0f,  1.0f,  1.0f, 1.0f}, // 7
 };
 
 
@@ -60,8 +65,18 @@ static const std::vector<Vertex> cube_vertices = {
 // In this case we are using clockwise indices to define the face.
 // See https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFrontFace.html
 static const std::vector<uint16_t> cube_indexes = {
-  2, 1, 3,
-  3, 1, 0
+  0, 1, 3,
+  1, 2, 3,
+  1, 4, 2,
+  4, 2, 7,
+  4, 5, 7,
+  7, 5, 6,
+  6, 5, 3,
+  5, 0, 3,
+  3, 2, 6,
+  2, 7, 6,
+  0, 1, 5,
+  1, 4, 5
 };
 
 static int usage(const char *prog, const char *msg) {

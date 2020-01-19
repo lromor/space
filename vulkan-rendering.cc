@@ -1,3 +1,10 @@
+// This source file contains all the utilities to build swapchains or custom scenes.
+// All the utilities required to generate scenes related to vulkan should be
+// found here.
+// Most of the code is an adapted version of the code you can find in:
+// https://github.com/KhronosGroup/Vulkan-Hpp.
+
+
 #include "vulkan-core.h"
 
 static std::optional<vk::PresentModeKHR> PickPresentMode(

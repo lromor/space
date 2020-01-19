@@ -223,7 +223,7 @@ StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
     current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
-    camera_{glm::vec3(0.0f, 2.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
+    camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
     projection_matrices_(UpdateProjectionMatrices()) {}
 
 StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
@@ -350,13 +350,13 @@ void StaticWireframeScene3D::AddMesh(const Mesh &mesh) {
   const unsigned int nindexes = mesh.indexes.size();
   index_buffer_data_.push_back(
     vk::core::BufferData(
-      physical_device, device, nindexes * sizeof(Vertex),
+      physical_device, device, nindexes * sizeof(uint16_t),
       vk::BufferUsageFlagBits::eIndexBuffer));
 
   const auto &index_data = index_buffer_data_.back();
 
   // Submit them to the device
-  vk::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nvertices);
+  vk::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nindexes);
   meshes_.push_back(mesh);
 }
 
@@ -421,7 +421,8 @@ void StaticWireframeScene3D::SubmitRendering() {
   command_buffer->setScissor(
     0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
 
-  command_buffer->draw(12 * 3, 1, 0, 0);
+  command_buffer->drawIndexed(meshes_.back().indexes.size(), 1, 0, 0, 0);
+  //command_buffer->draw(12 * 3, 1, 0, 0);
   command_buffer->endRenderPass();
   command_buffer->end();
 
@@ -429,8 +430,6 @@ void StaticWireframeScene3D::SubmitRendering() {
   vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
   vk::SubmitInfo submitInfo(1, &imageAcquiredSemaphore.get(), &waitDestinationStageMask, 1, &command_buffer.get());
   graphics_queue.submit(submitInfo, draw_fence_.get());
-
-
 }
 
 void StaticWireframeScene3D::Present() {
@@ -449,13 +448,13 @@ struct StaticWireframeScene3D::Projection StaticWireframeScene3D::UpdateProjecti
 
   vk::Extent2D &extent = vk_ctx_->surface_data.extent;
 
-  float fov = glm::radians(45.0f);
-  if (extent.width > extent.height) {
-    fov *= static_cast<float>(extent.height) / static_cast<float>(extent.width);
-  }
+  float fov = glm::radians(60.0f);
+  const auto aspect_ratio =
+    static_cast<float>(extent.width) / static_cast<float>(extent.height);
+
   glm::mat4x4 model = glm::mat4x4(1.0f);
   glm::mat4x4 view = glm::lookAt(camera_.eye, camera_.center, camera_.up);
-  glm::mat4x4 projection = glm::perspective(fov, 1.0f, 0.1f, 100.0f);
+  glm::mat4x4 projection = glm::perspective(fov, aspect_ratio, 0.1f, 100.0f);
   glm::mat4x4 clip =
     glm::mat4x4(1.0f,  0.0f, 0.0f, 0.0f,
                 0.0f, -1.0f, 0.0f, 0.0f,
