@@ -36,22 +36,6 @@ static void update_camera_controls(
   }
 }
 
-
-/*  7----6
-   /|   /|
-  4----5 |
-  | 3--|-2
-  |/   |/
-  0----1
-*/
-
-
-/*
- * 1 --- 0
- * |     |
- * |     |
- * 2 --- 3
- */
 static const std::vector<Vertex> cube_vertices = {
   // X, Y, Z, W
   // Lower vertices

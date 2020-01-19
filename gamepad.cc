@@ -145,9 +145,15 @@ void Gamepad::Impl::ReadEvents() {
       flag = LIBEVDEV_READ_FLAG_SYNC;
       continue;
     }
-    if (!MapSupportedEvent(&event, &data)) {
-      return;
-    }
+    // The event we received is not one we are yet interested in
+    // Let's skip it.
+    if (!MapSupportedEvent(&event, &data))
+      continue;
+
+    // Everything else is mapped, and make a call
+    // to the callbacks. We don't want to lose any
+    // event otherwise we might experience some
+    // "drifting" of some sort.
     clbk_(data);
   }
 }
