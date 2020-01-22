@@ -1,6 +1,5 @@
 // -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
-//
-// Leonardo Romor <leonardo.romor@gmail.com>
+// Copyright(c) Leonardo Romor <leonardo.romor@gmail.com>
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -13,6 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+//
+// This file contains the classes and function definitions for reading events
+// from a gamepad using evedev.
 
 #include <string.h>
 #include <unistd.h>
@@ -95,10 +97,6 @@ bool Gamepad::Impl::Init(const std::string &path) {
     return false;
   }
   printf("Gamepad device name: \"%s\"\n", libevdev_get_name(dev_));
-  // printf("Input device ID: bus %#x vendor %#x product %#x.\n",
-  //        libevdev_get_id_bustype(dev),
-  //        libevdev_get_id_vendor(dev),
-  //        libevdev_get_id_product(dev));
   return true;
 }
 

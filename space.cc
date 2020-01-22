@@ -1,3 +1,17 @@
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
+// Copyright(c) Leonardo Romor <leonardo.romor@gmail.com>
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation version 2.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
 
 #include <iostream>
 #include <optional>
@@ -11,7 +25,6 @@
 #include "vulkan-core.h"
 #include "simple-scene.h"
 #include "gamepad.h"
-
 
 static void update_camera_controls(
   CameraControls *camera_controls, const struct EventData &data) {
@@ -43,7 +56,6 @@ static void update_camera_controls(
   |/   |/
   0----1
 */
-
 static const std::vector<Vertex> cube_vertices = {
   // X, Y, Z, W
   // Front vertices
@@ -58,7 +70,6 @@ static const std::vector<Vertex> cube_vertices = {
   { -1.0f,  1.0f,  1.0f, 1.0f}, // 6
   {  1.0f,  1.0f,  1.0f, 1.0f}, // 7
 };
-
 
 // The indices from the pipeline configuration
 // can be configured to be both clockwise or counter clockwise.
@@ -90,7 +101,6 @@ static int usage(const char *prog, const char *msg) {
           "\t-h, --help               : Display this help text and exit.\n");
   return 1;
 }
-
 
 int main(int argc, char *argv[]) {
   std::string gamepad_path;
@@ -165,8 +175,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  // We the scene shouldn't be destroyed after we close the
-  // display.
+  // We create the scene inside the scope
+  // as we want to avoid its destruction after
+  // the display is closed with XCloseDisplay().
   {
     StaticWireframeScene3D scene(&vk_ctx);
 
@@ -228,8 +239,6 @@ int main(int argc, char *argv[]) {
         scene.SubmitRendering();
         scene.Present();
       }
-
-
    }
   }
  

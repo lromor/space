@@ -1,10 +1,23 @@
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
+// Copyright(c) Leonardo Romor <leonardo.romor@gmail.com>
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation version 2.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
 
 #ifndef _GAMEPAD_H
 #define _GAMEPAD_H
 
 #include <memory>
 #include <functional>
-
 
 enum Axis {
   LEFT_STICK_X = 0,
@@ -22,19 +35,21 @@ enum Button {
   NUM_SUPPORTED_BUTTONS
 };
 
-// If is_button is true, the
-// button if pressed if value > 0
-// The struct represent the normalized values of
-// the gamepad.
+// If 'is_button' is true, the
+// button is pressed if value > 0.
+// Source field is a value of the enum Button.
+// If 'is_button' is false, the struct
+// represents the normalized values of the axis.
+// Source field is a value of the enum Axis.
 struct EventData {
-  float value;
-  int source;
-  bool is_button;
+  float value; // The normalized value of the axis/button.
+  int source; // Either Axis or Button type.
+  bool is_button; // True if the event is from a button,
+                  // false if from an axis.
 };
 
-
-
-// Follows the Linux Gamepad specification
+// Simple event-driven class to read events
+// from a compatible gamecontroller evdev linux interface.
 class Gamepad {
 public:
   ~Gamepad();
@@ -51,6 +66,7 @@ public:
 
   // Used to read data from the gamepad. If there's data,
   // the callbacks are triggered.
+  // The call is always non blocking.
   void ReadEvents();
 
 private:
