@@ -27,10 +27,7 @@
 #include "gamepad.h"
 
 
-struct Vertex {
-  float x, y, z, w;   // Position
-};
-
+struct Vertex { float x, y, z, w; };
 
 struct Mesh {
   std::vector<Vertex> vertices;
@@ -63,9 +60,7 @@ public:
   void SubmitRendering();
   void Present();
 
-  //SetViewpoint?
 private:
-
   vk::core::VkAppContext *const vk_ctx_;
 
   // "Simple"

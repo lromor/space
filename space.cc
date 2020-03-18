@@ -26,7 +26,9 @@
 #include "simple-scene.h"
 #include "gamepad.h"
 
-static void update_camera_controls(
+
+
+static void gamepad2camera(
   CameraControls *camera_controls, const struct EventData &data) {
   if (!data.is_button) {
     switch (data.source) {
@@ -184,7 +186,10 @@ int main(int argc, char *argv[]) {
     Mesh mesh{ cube_vertices, cube_indexes };
     scene.AddMesh(mesh);
 
-    XSelectInput(display, window, ExposureMask | KeyPressMask);
+    XSelectInput(display, window,
+                 ExposureMask
+                 | KeyPressMask
+                 | PointerMotionMask);
     XMapWindow(display, window);
     XFlush(display);
 
@@ -198,7 +203,7 @@ int main(int argc, char *argv[]) {
     if (gamepad)
       gamepad->SetEventCallback(
         [&controls](const struct EventData &data) {
-          update_camera_controls(&controls, data);
+          gamepad2camera(&controls, data);
         });
 
     auto start = std::chrono::steady_clock::now();
@@ -226,8 +231,9 @@ int main(int argc, char *argv[]) {
       if (FD_ISSET(x11_fd, &read_fds)) {
         while(XPending(display)) {
           XNextEvent(display, &e);
-          if (e.type == KeyPress)
+          if (e.type == KeyPress) {
             exit = true;
+          }
         }
       }
 
