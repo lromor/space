@@ -73,7 +73,7 @@ static std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
   return picked_format;
 }
 
-namespace vk {
+namespace space {
   namespace core {
     SwapChainData::SwapChainData(
       vk::PhysicalDevice const& physical_device, vk::UniqueDevice const& device,

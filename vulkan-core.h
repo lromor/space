@@ -16,8 +16,8 @@
 //
 // This file contains the represents an intermediate interface simplify vulkan.
 
-#ifndef __VULKAN_CORE_H_
-#define __VULKAN_CORE_H_
+#ifndef __SPACE_CORE_H_
+#define __SPACE_CORE_H_
 
 #include <optional>
 
@@ -44,7 +44,7 @@ VULKAN_HPP_INLINE TargetType checked_cast(SourceType value) {
   return static_cast<TargetType>(value);
 }
 
-namespace vk {
+namespace space {
   namespace core {
     // Vulkan initialization routines
     struct SurfaceData {

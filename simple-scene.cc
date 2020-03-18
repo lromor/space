@@ -236,7 +236,7 @@ vk::UniquePipeline CreateGraphicsPipeline(
   return device->createGraphicsPipelineUnique(pipelineCache.get(), graphicsPipelineCreateInfo);
 }
 
-StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
+StaticWireframeScene3D::StaticWireframeScene3D(space::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
     current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
@@ -245,7 +245,7 @@ StaticWireframeScene3D::StaticWireframeScene3D(vk::core::VkAppContext *vk_ctx)
 
 StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
-  vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
   vk::UniqueDevice &device = vk_ctx_->device;
 
   // For multi threaded applications, we should create a command pool
@@ -254,7 +254,7 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
   const uint32_t graphics_queue_family_index = vk_ctx_->graphics_queue_family_index;
   const uint32_t present_queue_family_index = vk_ctx_->present_queue_family_index;
   vk::UniqueCommandPool command_pool =
-    vk::core::CreateCommandPool(vk_ctx_->device, graphics_queue_family_index);
+    space::core::CreateCommandPool(vk_ctx_->device, graphics_queue_family_index);
 
   vk::UniqueCommandBuffer command_buffer =
     std::move(
@@ -268,21 +268,21 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
   vk::Queue present_queue =
     device->getQueue(present_queue_family_index, 0);
 
-  vk::core::SwapChainData swap_chain_data(
+  space::core::SwapChainData swap_chain_data(
     physical_device, device, *surface_data.surface, surface_data.extent,
     vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
     vk::UniqueSwapchainKHR(), graphics_queue_family_index,
     present_queue_family_index);
 
-  vk::core::DepthBufferData depth_buffer_data(
+  space::core::DepthBufferData depth_buffer_data(
     physical_device, device, vk::Format::eD16Unorm, surface_data.extent);
 
-  vk::core::BufferData uniform_buffer_data(
+  space::core::BufferData uniform_buffer_data(
     physical_device, device, sizeof(glm::mat4x4),
     vk::BufferUsageFlagBits::eUniformBuffer);
 
   vk::UniqueDescriptorSetLayout descriptor_set_layout =
-    vk::core::CreateDescriptorSetLayout(
+    space::core::CreateDescriptorSetLayout(
       device, { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex} });
   vk::UniquePipelineLayout pipeline_layout =
     device->createPipelineLayoutUnique(
@@ -307,7 +307,7 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
       device->allocateDescriptorSetsUnique(
         vk::DescriptorSetAllocateInfo(*descriptor_pool, 1, &*descriptor_set_layout)).front());
 
-  vk::core::UpdateDescriptorSets(
+  space::core::UpdateDescriptorSets(
     device, descriptor_set,
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
 
@@ -356,31 +356,31 @@ void StaticWireframeScene3D::AddMesh(const Mesh &mesh) {
 
   // Create the index and vertex buffer
   vertex_buffer_data_.push_back(
-    vk::core::BufferData(
+    space::core::BufferData(
       physical_device, device, nvertices * sizeof(Vertex),
       vk::BufferUsageFlagBits::eVertexBuffer));
 
   const auto &vertex_data = vertex_buffer_data_.back();
   // Submit them to the device
-  vk::core::CopyToDevice(device, vertex_data.deviceMemory, mesh.vertices.data(), nvertices);
+  space::core::CopyToDevice(device, vertex_data.deviceMemory, mesh.vertices.data(), nvertices);
 
   const unsigned int nindexes = mesh.indexes.size();
   index_buffer_data_.push_back(
-    vk::core::BufferData(
+    space::core::BufferData(
       physical_device, device, nindexes * sizeof(uint16_t),
       vk::BufferUsageFlagBits::eIndexBuffer));
 
   const auto &index_data = index_buffer_data_.back();
 
   // Submit them to the device
-  vk::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nindexes);
+  space::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nindexes);
   meshes_.push_back(mesh);
 }
 
 
 void StaticWireframeScene3D::SubmitRendering() {
   const vk::UniqueDevice &device = vk_ctx_->device;
-  const vk::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
+  const space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
   const vk::Queue &graphics_queue = r_ctx_.graphics_queue;
   const vk::UniqueCommandBuffer &command_buffer = r_ctx_.command_buffer;
   const vk::UniqueRenderPass &render_pass = r_ctx_.render_pass;
@@ -388,14 +388,14 @@ void StaticWireframeScene3D::SubmitRendering() {
   const vk::UniquePipeline &graphics_pipeline = r_ctx_.graphics_pipeline;
   const vk::UniquePipelineLayout &pipeline_layout = r_ctx_.pipeline_layout;
   const vk::UniqueDescriptorSet &descriptor_set = r_ctx_.descriptor_set;
-  const vk::core::SurfaceData &surface_data = vk_ctx_->surface_data;
-  const vk::core::BufferData &uniform_buffer_data = r_ctx_.uniform_buffer_data;
+  const space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  const space::core::BufferData &uniform_buffer_data = r_ctx_.uniform_buffer_data;
 
   // Update the projection matrices with the current values of camera, model, fov, etc..
   projection_matrices_ = UpdateProjectionMatrices();
  
   // Update uniform buffer
-  vk::core::CopyToDevice(
+  space::core::CopyToDevice(
     device, uniform_buffer_data.deviceMemory,  projection_matrices_.clip
     * projection_matrices_.projection * projection_matrices_.view * projection_matrices_.model);
 
@@ -451,7 +451,7 @@ void StaticWireframeScene3D::SubmitRendering() {
 
 void StaticWireframeScene3D::Present() {
   vk::UniqueDevice &device = vk_ctx_->device;
-  vk::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
+  space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
   vk::Queue &present_queue = r_ctx_.present_queue;
 
   while (vk::Result::eTimeout

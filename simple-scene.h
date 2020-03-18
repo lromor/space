@@ -53,7 +53,7 @@ struct CameraControls {
 // The scene renders the 3d object in wireframe mode.
 class StaticWireframeScene3D {
 public:
-  StaticWireframeScene3D(vk::core::VkAppContext *context);
+  StaticWireframeScene3D(space::core::VkAppContext *context);
 
   void AddMesh(const Mesh &mesh);
   void Input(CameraControls &input);
@@ -61,7 +61,7 @@ public:
   void Present();
 
 private:
-  vk::core::VkAppContext *const vk_ctx_;
+  space::core::VkAppContext *const vk_ctx_;
 
   // "Simple"
   struct Simple3DRenderingContext {
@@ -70,10 +70,10 @@ private:
     vk::Queue graphics_queue;
     vk::Queue present_queue;
 
-    vk::core::SwapChainData swap_chain_data;
+    space::core::SwapChainData swap_chain_data;
 
-    vk::core::DepthBufferData depth_buffer_data;
-    vk::core::BufferData uniform_buffer_data;
+    space::core::DepthBufferData depth_buffer_data;
+    space::core::BufferData uniform_buffer_data;
 
 
     vk::UniqueDescriptorSetLayout descriptor_set_layout;
@@ -91,8 +91,8 @@ private:
   struct Simple3DRenderingContext InitRenderingContext();
   Simple3DRenderingContext r_ctx_;
 
-  std::vector<vk::core::BufferData> vertex_buffer_data_;
-  std::vector<vk::core::BufferData> index_buffer_data_;
+  std::vector<space::core::BufferData> vertex_buffer_data_;
+  std::vector<space::core::BufferData> index_buffer_data_;
   std::vector<Mesh> meshes_;
 
   uint32_t current_buffer_;

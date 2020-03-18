@@ -132,13 +132,13 @@ int main(int argc, char *argv[]) {
 
 #ifndef NDEBUG
   std::cout << "Debug mode on" << std::endl;
-  const struct vk::core::VkAppConfig config = {
+  const struct space::core::VkAppConfig config = {
     "Space", "SpaceEngine", {
       "VK_LAYER_LUNARG_standard_validation" },
     { VK_KHR_SURFACE_EXTENSION_NAME,
       VK_KHR_XLIB_SURFACE_EXTENSION_NAME }};
 #else
-  const struct vk::core::VkAppConfig config = {
+  const struct space::core::VkAppConfig config = {
     "Space", "SpaceEngine", {},
     {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_EXTENSION_NAME}};
 #endif
@@ -168,7 +168,7 @@ int main(int argc, char *argv[]) {
   Window window = XCreateSimpleWindow(
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
 
-  vk::core::VkAppContext vk_ctx;
+  space::core::VkAppContext vk_ctx;
 
   if (auto ret = InitVulkan(config, display, window)) {
     vk_ctx = std::move(ret.value());

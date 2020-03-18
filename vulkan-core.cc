@@ -274,7 +274,7 @@ VkBool32 DebugUtilsMessengerCallback(
 #endif
 
 
-namespace vk {
+namespace space {
   namespace core {
 
     std::optional<VkAppContext> InitVulkan(
