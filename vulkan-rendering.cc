@@ -18,6 +18,8 @@
 // All the utilities required to generate scenes related to vulkan should be
 // found here.
 
+#include <numeric>
+
 #include "vulkan-core.h"
 
 static std::optional<vk::PresentModeKHR> PickPresentMode(
@@ -312,5 +314,203 @@ namespace space {
       }
       device->updateDescriptorSets(write_descriptor_sets, nullptr);
     }
+
+    vk::UniqueDescriptorPool CreateDescriptorPool(
+      vk::UniqueDevice &device, std::vector<vk::DescriptorPoolSize> const& poolSizes) {
+      assert(!poolSizes.empty());
+      uint32_t maxSets =
+        std::accumulate(
+          poolSizes.begin(), poolSizes.end(), 0,
+          [](uint32_t sum, vk::DescriptorPoolSize const& dps) {
+            return sum + dps.descriptorCount;
+          });
+      assert(0 < maxSets);
+
+      vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo(
+        vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, maxSets,
+        poolSizes.size(), poolSizes.data());
+      return device->createDescriptorPoolUnique(descriptorPoolCreateInfo);
+    }
+
+    std::vector<vk::UniqueFramebuffer> CreateFramebuffers(
+      vk::UniqueDevice &device, vk::UniqueRenderPass &renderPass,
+      std::vector<vk::UniqueImageView> const& imageViews,
+      vk::UniqueImageView const& depthImageView, vk::Extent2D const& extent) {
+      vk::ImageView attachments[2];
+      attachments[1] = depthImageView.get();
+
+      vk::FramebufferCreateInfo framebufferCreateInfo(
+        vk::FramebufferCreateFlags(), *renderPass, depthImageView ? 2
+        : 1, attachments, extent.width, extent.height, 1);
+      std::vector<vk::UniqueFramebuffer> framebuffers;
+      framebuffers.reserve(imageViews.size());
+      for (auto const& view : imageViews) {
+        attachments[0] = view.get();
+        framebuffers.push_back(device->createFramebufferUnique(framebufferCreateInfo));
+      }
+      return framebuffers;
+    }
+
+    std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
+      std::vector<vk::SurfaceFormatKHR> const& formats) {
+      assert(!formats.empty());
+      vk::SurfaceFormatKHR picked_format = formats[0];
+      if (formats.size() == 1) {
+        if (formats[0].format == vk::Format::eUndefined) {
+          picked_format.format = vk::Format::eB8G8R8A8Unorm;
+          picked_format.colorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        }
+      } else {
+        // request several formats, the first found will be used
+        vk::Format requested_formats[]  = {
+          vk::Format::eB8G8R8A8Unorm,
+          vk::Format::eR8G8B8A8Unorm,
+          vk::Format::eB8G8R8Unorm,
+          vk::Format::eR8G8B8Unorm
+        };
+        vk::ColorSpaceKHR requestedColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
+        for (size_t i = 0; i <
+               sizeof(requested_formats) / sizeof(requested_formats[0]); i++) {
+          vk::Format requestedFormat = requested_formats[i];
+          auto it = std::find_if(formats.begin(),
+                                 formats.end(),
+                                 [requestedFormat, requestedColorSpace](auto const& f) {
+                                   return (f.format == requestedFormat)
+                                     && (f.colorSpace == requestedColorSpace);
+                                 });
+          if (it != formats.end()) {
+            picked_format = *it;
+            break;
+          }
+        }
+      }
+      assert(picked_format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear);
+      return picked_format;
+    }
+
+    vk::UniqueRenderPass CreateRenderPass(
+      vk::UniqueDevice &device, vk::Format colorFormat, vk::Format depthFormat,
+      vk::AttachmentLoadOp loadOp, vk::ImageLayout colorFinalLayout) {
+      std::vector<vk::AttachmentDescription> attachmentDescriptions;
+      assert(colorFormat != vk::Format::eUndefined);
+      attachmentDescriptions.push_back(
+        vk::AttachmentDescription(
+          vk::AttachmentDescriptionFlags(),
+          colorFormat, vk::SampleCountFlagBits::e1, loadOp,
+          vk::AttachmentStoreOp::eStore,
+          vk::AttachmentLoadOp::eDontCare,
+          vk::AttachmentStoreOp::eDontCare,
+          vk::ImageLayout::eUndefined, colorFinalLayout));
+
+      if (depthFormat != vk::Format::eUndefined) {
+        attachmentDescriptions.push_back(
+          vk::AttachmentDescription(
+            vk::AttachmentDescriptionFlags(), depthFormat, vk::SampleCountFlagBits::e1,
+            loadOp, vk::AttachmentStoreOp::eDontCare,
+            vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthStencilAttachmentOptimal));
+      }
+      vk::AttachmentReference colorAttachment(
+        0, vk::ImageLayout::eColorAttachmentOptimal);
+      vk::AttachmentReference depthAttachment(
+        1, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+      vk::SubpassDescription subpassDescription(
+        vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
+        nullptr, 1, &colorAttachment, nullptr,
+        (depthFormat != vk::Format::eUndefined) ? &depthAttachment : nullptr);
+      return device->createRenderPassUnique(
+        vk::RenderPassCreateInfo(
+          vk::RenderPassCreateFlags(), static_cast<uint32_t>(attachmentDescriptions.size()),
+          attachmentDescriptions.data(), 1, &subpassDescription));
+    }
+
+    vk::UniquePipeline CreateGraphicsPipeline(
+      vk::UniqueDevice const& device, vk::UniquePipelineCache const& pipelineCache,
+      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& vertexShaderData,
+      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& fragmentShaderData,
+      uint32_t vertexStride,
+      std::vector<std::pair<vk::Format, uint32_t>> const& vertexInputAttributeFormatOffset,
+      vk::FrontFace frontFace, bool depthBuffered,
+      vk::UniquePipelineLayout const& pipelineLayout,
+      vk::UniqueRenderPass const& renderPass) {
+      vk::PipelineShaderStageCreateInfo pipelineShaderStageCreateInfos[2] = {
+        vk::PipelineShaderStageCreateInfo(
+          vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eVertex,
+          vertexShaderData.first, "main", vertexShaderData.second),
+        vk::PipelineShaderStageCreateInfo(
+          vk::PipelineShaderStageCreateFlags(), vk::ShaderStageFlagBits::eFragment,
+          fragmentShaderData.first, "main", fragmentShaderData.second)
+      };
+
+      std::vector<vk::VertexInputAttributeDescription> vertexInputAttributeDescriptions;
+      vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateCreateInfo;
+      if (0 < vertexStride) {
+        vk::VertexInputBindingDescription vertexInputBindingDescription(0, vertexStride);
+        vertexInputAttributeDescriptions.reserve(vertexInputAttributeFormatOffset.size());
+        for (uint32_t i=0 ; i<vertexInputAttributeFormatOffset.size() ; i++) {
+          vertexInputAttributeDescriptions.push_back(
+            vk::VertexInputAttributeDescription(
+              i, 0, vertexInputAttributeFormatOffset[i].first,
+              vertexInputAttributeFormatOffset[i].second));
+        }
+        pipelineVertexInputStateCreateInfo.vertexBindingDescriptionCount = 1;
+        pipelineVertexInputStateCreateInfo.pVertexBindingDescriptions =
+          &vertexInputBindingDescription;
+        pipelineVertexInputStateCreateInfo.vertexAttributeDescriptionCount =
+          vertexInputAttributeDescriptions.size();
+        pipelineVertexInputStateCreateInfo.pVertexAttributeDescriptions =
+          vertexInputAttributeDescriptions.data();
+      }
+
+      vk::PipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo(
+        vk::PipelineInputAssemblyStateCreateFlags(), vk::PrimitiveTopology::eTriangleList);
+
+      vk::PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo(
+        vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
+
+      vk::PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo(
+        vk::PipelineRasterizationStateCreateFlags(), false, false,
+        vk::PolygonMode::eLine, vk::CullModeFlagBits::eNone,
+        frontFace, false, 0.0f, 0.0f, 0.0f, 1.0f);
+
+      vk::PipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo(
+        {}, vk::SampleCountFlagBits::e1);
+
+      vk::StencilOpState stencilOpState(
+        vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
+        vk::CompareOp::eAlways);
+      vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
+        vk::PipelineDepthStencilStateCreateFlags(), depthBuffered, depthBuffered,
+        vk::CompareOp::eLessOrEqual, false, false, stencilOpState, stencilOpState);
+
+      vk::ColorComponentFlags colorComponentFlags(
+        vk::ColorComponentFlagBits::eR
+        | vk::ColorComponentFlagBits::eG
+        | vk::ColorComponentFlagBits::eB
+        | vk::ColorComponentFlagBits::eA);
+
+      vk::PipelineColorBlendAttachmentState pipelineColorBlendAttachmentState(
+        false, vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd,
+        vk::BlendFactor::eZero, vk::BlendFactor::eZero, vk::BlendOp::eAdd, colorComponentFlags);
+      vk::PipelineColorBlendStateCreateInfo pipelineColorBlendStateCreateInfo(
+        vk::PipelineColorBlendStateCreateFlags(), false, vk::LogicOp::eNoOp,
+        1, &pipelineColorBlendAttachmentState, { { 1.0f, 1.0f, 1.0f, 1.0f } });
+
+      vk::DynamicState dynamicStates[2] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+      vk::PipelineDynamicStateCreateInfo pipelineDynamicStateCreateInfo(
+        vk::PipelineDynamicStateCreateFlags(), 2, dynamicStates);
+
+      vk::GraphicsPipelineCreateInfo graphicsPipelineCreateInfo(
+        vk::PipelineCreateFlags(), 2, pipelineShaderStageCreateInfos,
+        &pipelineVertexInputStateCreateInfo, &pipelineInputAssemblyStateCreateInfo,
+        nullptr, &pipelineViewportStateCreateInfo, &pipelineRasterizationStateCreateInfo,
+        &pipelineMultisampleStateCreateInfo, &pipelineDepthStencilStateCreateInfo,
+        &pipelineColorBlendStateCreateInfo, &pipelineDynamicStateCreateInfo,
+        pipelineLayout.get(), renderPass.get());
+
+      return device->createGraphicsPipelineUnique(pipelineCache.get(), graphicsPipelineCreateInfo);
+    }
+
   }
 }

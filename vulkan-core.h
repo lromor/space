@@ -215,7 +215,33 @@ namespace space {
       std::vector<std::tuple<vk::DescriptorType,
       vk::UniqueBuffer const&,
       vk::UniqueBufferView const&>> const& bufferData, uint32_t bindingOffset = 0);
+
+    vk::UniqueDescriptorPool CreateDescriptorPool(
+      vk::UniqueDevice &device, std::vector<vk::DescriptorPoolSize> const& poolSizes);
+
+    std::vector<vk::UniqueFramebuffer> CreateFramebuffers(
+      vk::UniqueDevice &device, vk::UniqueRenderPass &renderPass,
+      std::vector<vk::UniqueImageView> const& imageViews,
+      vk::UniqueImageView const& depthImageView, vk::Extent2D const& extent);
+
+    std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
+      std::vector<vk::SurfaceFormatKHR> const& formats);
+
+    vk::UniqueRenderPass CreateRenderPass(
+      vk::UniqueDevice &device, vk::Format colorFormat, vk::Format depthFormat,
+      vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear,
+      vk::ImageLayout colorFinalLayout = vk::ImageLayout::ePresentSrcKHR);
+
+    vk::UniquePipeline CreateGraphicsPipeline(
+      vk::UniqueDevice const& device, vk::UniquePipelineCache const& pipelineCache,
+      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& vertexShaderData,
+      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& fragmentShaderData,
+      uint32_t vertexStride,
+      std::vector<std::pair<vk::Format, uint32_t>> const& vertexInputAttributeFormatOffset,
+      vk::FrontFace frontFace, bool depthBuffered,
+      vk::UniquePipelineLayout const& pipelineLayout,
+      vk::UniqueRenderPass const& renderPass);
   }
 }
 
-#endif // __VULKAN-CORE_H_
+#endif // _VULKAN-CORE_H
