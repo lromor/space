@@ -232,16 +232,45 @@ namespace space {
       vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear,
       vk::ImageLayout colorFinalLayout = vk::ImageLayout::ePresentSrcKHR);
 
-    vk::UniquePipeline CreateGraphicsPipeline(
-      vk::UniqueDevice const& device, vk::UniquePipelineCache const& pipelineCache,
-      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& vertexShaderData,
-      std::pair<vk::ShaderModule, vk::SpecializationInfo const*> const& fragmentShaderData,
-      uint32_t vertexStride,
-      std::vector<std::pair<vk::Format, uint32_t>> const& vertexInputAttributeFormatOffset,
-      vk::FrontFace frontFace, bool depthBuffered,
-      vk::UniquePipelineLayout const& pipelineLayout,
-      vk::UniqueRenderPass const& renderPass);
+    // Simplify the creation of the graphics pipeline.
+    class GraphicsPipelineBuilder {
+    public:
+      GraphicsPipelineBuilder(const vk::UniqueDevice *device,
+                              const vk::UniquePipelineLayout *pipeline_layout,
+                              const vk::UniqueRenderPass *render_pass);
+
+      GraphicsPipelineBuilder& SetPrimitiveTopology(vk::PrimitiveTopology topology);
+      GraphicsPipelineBuilder& SetPolygoneMode(vk::PolygonMode mode);
+      GraphicsPipelineBuilder& SetFrontFace(vk::FrontFace front_face);
+
+      // Has depth
+      GraphicsPipelineBuilder& DepthBuffered(const bool value = true);
+
+      // Shaders
+      GraphicsPipelineBuilder& AddVertexShader(
+        const vk::ShaderModule &shader, const vk::SpecializationInfo *specialization_info = NULL);
+      GraphicsPipelineBuilder& AddFragmentShader(
+        const vk::ShaderModule &shader, const vk::SpecializationInfo *specialization_info = NULL);
+
+      GraphicsPipelineBuilder& AddVertexInputBindingDescription(
+        uint32_t binding, uint32_t stride, vk::VertexInputRate input_rate);
+
+      GraphicsPipelineBuilder& AddVertexInputAttributeDescription(
+        uint32_t location, uint32_t binding, vk::Format format, uint32_t offset);
+
+      // Which states will be handled using command buffers.
+      GraphicsPipelineBuilder& EnableDynamicState(const vk::DynamicState &state);
+
+      // Consume the builder and construct the pipeline
+      vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr);
+
+      ~GraphicsPipelineBuilder();
+ 
+    private:
+      class Impl;
+      std::unique_ptr<Impl> impl_;
+    };
   }
 }
 
-#endif // _VULKAN-CORE_H
+#endif // _VULKAN_CORE_H

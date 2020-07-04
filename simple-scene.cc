@@ -118,7 +118,6 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
       vk::ShaderModuleCreateInfo(
         vk::ShaderModuleCreateFlags(), sizeof(simple_vert), simple_vert));
 
-
   vk::UniqueShaderModule frag =
     device->createShaderModuleUnique(
       vk::ShaderModuleCreateInfo(
@@ -127,14 +126,19 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
   vk::UniquePipelineCache pipeline_cache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
 
-  vk::UniquePipeline graphics_pipeline =
-    space::core::CreateGraphicsPipeline(
-      device, pipeline_cache, std::make_pair(
-        *vertex, nullptr),
-      std::make_pair(*frag, nullptr),
-      sizeof(Vertex),
-      { { vk::Format::eR32G32B32A32Sfloat, 0 }, { vk::Format::eR32G32B32A32Sfloat, 16 } },
-      vk::FrontFace::eClockwise, true, pipeline_layout, render_pass);
+  space::core::GraphicsPipelineBuilder builder(&device, &pipeline_layout, &render_pass);
+  auto graphics_pipeline = builder.SetPrimitiveTopology(vk::PrimitiveTopology::eTriangleList)
+    .SetPolygoneMode(vk::PolygonMode::eLine)
+    .SetFrontFace(vk::FrontFace::eClockwise)
+    .DepthBuffered(true)
+    .AddFragmentShader(*frag)
+    .AddVertexShader(*vertex)
+    .AddVertexInputBindingDescription(0, sizeof(Vertex), vk::VertexInputRate::eVertex)
+    .AddVertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32A32Sfloat, 0)
+    .AddVertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32A32Sfloat, 0)
+    .EnableDynamicState(vk::DynamicState::eScissor)
+    .EnableDynamicState(vk::DynamicState::eViewport)
+    .Create(&pipeline_cache);
 
   vk::PipelineStageFlags wait_destination_stage_mask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
