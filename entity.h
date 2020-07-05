@@ -23,7 +23,7 @@ namespace space {
   class Entity {
   public:
     Entity() = default;
-    virtual ~Entity();
+    virtual ~Entity() {}
     virtual void Register(
       space::core::VkAppContext *context,
       vk::UniquePipelineLayout *pipeline_layout,
@@ -31,7 +31,7 @@ namespace space {
       vk::UniquePipelineCache *pipeline_cache) = 0;
 
     // Draw in the command buffer
-    virtual void Draw(const vk::UniqueCommandBuffer &command_buffer) = 0;
+    virtual void Draw(const vk::UniqueCommandBuffer *command_buffer) = 0;
   };
 }
 

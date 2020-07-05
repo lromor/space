@@ -198,7 +198,7 @@ void Scene::SubmitRendering() {
      0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
 
    for (const auto entity : entities_) {
-     entity->Draw(command_buffer);
+     entity->Draw(&command_buffer);
    }
 
   command_buffer->endRenderPass();

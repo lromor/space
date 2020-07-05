@@ -142,7 +142,7 @@ int main(int argc, char *argv[]) {
   // the display is closed with XCloseDisplay().
   {
     Scene scene(&vk_ctx);
-    ReferenceGrid reference_grid(&vk_ctx);
+    ReferenceGrid reference_grid;
 
     scene.AddEntity(&reference_grid);
     XSelectInput(display, window,

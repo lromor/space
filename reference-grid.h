@@ -27,11 +27,11 @@ public:
     space::core::VkAppContext *context,
     vk::UniquePipelineLayout *pipeline_layout,
     vk::UniqueRenderPass *render_pass,
-    vk::UniquePipelineCache *pipeline_cache);
+    vk::UniquePipelineCache *pipeline_cache) final;
   virtual ~ReferenceGrid() {}
 
   // Draw in the command buffer
-  virtual void Draw(const vk::UniqueCommandBuffer *command_buffer);
+  virtual void Draw(const vk::UniqueCommandBuffer *command_buffer) final;
 
 private:
   vk::UniquePipeline pipeline_;
