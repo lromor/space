@@ -24,15 +24,8 @@
 #include <glm/gtx/string_cast.hpp>
 
 #include "vulkan-core.h"
+#include "entity.h"
 #include "gamepad.h"
-
-
-struct Vertex { float x, y, z, w; };
-
-struct Mesh {
-  std::vector<Vertex> vertices;
-  std::vector<uint16_t> indexes;
-};
 
 struct CameraControls {
   CameraControls() = default;
@@ -45,17 +38,13 @@ struct CameraControls {
   float dphi, dtheta;
 };
 
-
 // Given an initialized vulkan context
-// perform a basic rendering of a static scene
-// where n meshes can be added dynamically
-// and camera with rotation/translation can be changed.
-// The scene renders the 3d object in wireframe mode.
-class StaticWireframeScene3D {
+// perform rendering of the entities.
+class Scene {
 public:
-  StaticWireframeScene3D(space::core::VkAppContext *context);
+  Scene(space::core::VkAppContext *context);
 
-  void AddMesh(const Mesh &mesh);
+  void AddEntity(space::Entity *entity);
   void Input(CameraControls &input);
   void SubmitRendering();
   void Present();
@@ -63,8 +52,7 @@ public:
 private:
   space::core::VkAppContext *const vk_ctx_;
 
-  // "Simple"
-  struct Simple3DRenderingContext {
+  struct RenderingContext {
     vk::UniqueCommandPool command_pool;
     vk::UniqueCommandBuffer command_buffer;
     vk::Queue graphics_queue;
@@ -72,38 +60,44 @@ private:
 
     space::core::SwapChainData swap_chain_data;
 
+    // Depth buffer data. Contains the resulting
+    // depth pseudoimage.
     space::core::DepthBufferData depth_buffer_data;
+
+    // Uniform buffer containing projection matrix
+    // and other shared buffers.
     space::core::BufferData uniform_buffer_data;
 
-
     vk::UniqueDescriptorSetLayout descriptor_set_layout;
+
+    // The pipeline layout used to describe
+    // how descriptors should be used.
     vk::UniquePipelineLayout pipeline_layout;
+
+    // We are using a single render pass
     vk::UniqueRenderPass render_pass;
     std::vector<vk::UniqueFramebuffer> framebuffers;
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSet descriptor_set;
     vk::UniquePipelineCache pipeline_cache;
-    vk::UniquePipeline graphics_pipeline;
-    vk::PipelineStageFlags wait_destination_stage_mask;
-
   };
 
-  struct Simple3DRenderingContext InitRenderingContext();
-  Simple3DRenderingContext r_ctx_;
-
-  std::vector<space::core::BufferData> vertex_buffer_data_;
-  std::vector<space::core::BufferData> index_buffer_data_;
-  std::vector<Mesh> meshes_;
+  // Initialize the rendering context
+  struct RenderingContext InitRenderingContext();
+  RenderingContext r_ctx_;
 
   uint32_t current_buffer_;
-  vk::UniqueFence draw_fence_;
 
+  // Fence for when the rendering is done
+  // and we are ready to present :)
+  vk::UniqueFence draw_fence_;
 
   struct Camera {
     glm::vec3 eye; // Camera position.
     glm::vec3 center; // Looking point.
     glm::vec3 up; // Camera vertical axis.
   };
+
   struct Camera camera_;
 
   struct Projection {
@@ -116,6 +110,9 @@ private:
 
   struct Projection projection_matrices_;
   struct Projection UpdateProjectionMatrices();
+
+
+  std::vector<space::Entity *> entities_;
 };
 
 #endif // __SIMPLE_SCENE_H_

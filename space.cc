@@ -23,7 +23,8 @@
 #include <vulkan/vulkan.hpp>
 
 #include "vulkan-core.h"
-#include "simple-scene.h"
+#include "scene.h"
+#include "reference-grid.h"
 #include "gamepad.h"
 
 
@@ -50,47 +51,6 @@ static void gamepad2camera(
     return;
   }
 }
-
-/*  6----7
-   /|   /|
-  3----2 |
-  | 5--|-4
-  |/   |/
-  0----1
-*/
-static const std::vector<Vertex> cube_vertices = {
-  // X, Y, Z, W
-  // Front vertices
-  { -1.0f, -1.0f, -1.0f, 1.0f}, // 0
-  {  1.0f, -1.0f, -1.0f, 1.0f}, // 1
-  {  1.0f,  1.0f, -1.0f, 1.0f}, // 2
-  { -1.0f,  1.0f, -1.0f, 1.0f}, // 3
-
-  // Back vertices
-  {  1.0f, -1.0f,  1.0f, 1.0f}, // 4
-  { -1.0f, -1.0f,  1.0f, 1.0f}, // 5
-  { -1.0f,  1.0f,  1.0f, 1.0f}, // 6
-  {  1.0f,  1.0f,  1.0f, 1.0f}, // 7
-};
-
-// The indices from the pipeline configuration
-// can be configured to be both clockwise or counter clockwise.
-// In this case we are using clockwise indices to define the face.
-// See https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFrontFace.html
-static const std::vector<uint16_t> cube_indexes = {
-  0, 1, 3,
-  1, 2, 3,
-  1, 4, 2,
-  4, 2, 7,
-  4, 5, 7,
-  7, 5, 6,
-  6, 5, 3,
-  5, 0, 3,
-  3, 2, 6,
-  2, 7, 6,
-  0, 1, 5,
-  1, 4, 5
-};
 
 static int usage(const char *prog, const char *msg) {
   if (msg) {
@@ -181,11 +141,10 @@ int main(int argc, char *argv[]) {
   // as we want to avoid its destruction after
   // the display is closed with XCloseDisplay().
   {
-    StaticWireframeScene3D scene(&vk_ctx);
+    Scene scene(&vk_ctx);
+    ReferenceGrid reference_grid(&vk_ctx);
 
-    Mesh mesh{ cube_vertices, cube_indexes };
-    scene.AddMesh(mesh);
-
+    scene.AddEntity(&reference_grid);
     XSelectInput(display, window,
                  ExposureMask
                  | KeyPressMask

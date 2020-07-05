@@ -32,20 +32,20 @@
 #include <glm/gtx/rotate_vector.hpp>
 
 #include "vulkan-core.h"
-#include "simple-scene.h"
+#include "scene.h"
 #include "shaders/simple.frag.h"
 #include "shaders/simple.vert.h"
 
 #define FENCE_TIMEOUT 100000000
 
-StaticWireframeScene3D::StaticWireframeScene3D(space::core::VkAppContext *vk_ctx)
+Scene::Scene(space::core::VkAppContext *vk_ctx)
   : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
     current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
     camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
     projection_matrices_(UpdateProjectionMatrices()) {}
 
-StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRenderingContext() {
+Scene::RenderingContext Scene::InitRenderingContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
   space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
   vk::UniqueDevice &device = vk_ctx_->device;
@@ -126,72 +126,30 @@ StaticWireframeScene3D::Simple3DRenderingContext StaticWireframeScene3D::InitRen
   vk::UniquePipelineCache pipeline_cache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
 
-  space::core::GraphicsPipelineBuilder builder(&device, &pipeline_layout, &render_pass);
-  auto graphics_pipeline = builder.SetPrimitiveTopology(vk::PrimitiveTopology::eTriangleList)
-    .SetPolygoneMode(vk::PolygonMode::eLine)
-    .SetFrontFace(vk::FrontFace::eClockwise)
-    .DepthBuffered(true)
-    .AddFragmentShader(*frag)
-    .AddVertexShader(*vertex)
-    .AddVertexInputBindingDescription(0, sizeof(Vertex), vk::VertexInputRate::eVertex)
-    .AddVertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32A32Sfloat, 0)
-    .AddVertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32A32Sfloat, 0)
-    .EnableDynamicState(vk::DynamicState::eScissor)
-    .EnableDynamicState(vk::DynamicState::eViewport)
-    .Create(&pipeline_cache);
-
-  vk::PipelineStageFlags wait_destination_stage_mask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-
-  StaticWireframeScene3D::Simple3DRenderingContext r_ctx{
+  Scene::RenderingContext r_ctx{
     std::move(command_pool), std::move(command_buffer), graphics_queue, present_queue,
     std::move(swap_chain_data), std::move(depth_buffer_data), std::move(uniform_buffer_data),
     std::move(descriptor_set_layout), std::move(pipeline_layout),
     std::move(render_pass), std::move(framebuffers), std::move(descriptor_pool),
-    std::move(descriptor_set), std::move(pipeline_cache), std::move(graphics_pipeline),
-    wait_destination_stage_mask};
+    std::move(descriptor_set), std::move(pipeline_cache)};
 
   return r_ctx;
 }
 
-void StaticWireframeScene3D::AddMesh(const Mesh &mesh) {
-
-  vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
-  vk::UniqueDevice &device = vk_ctx_->device;
-
-  const unsigned int nvertices = mesh.vertices.size();
-
-  // Create the index and vertex buffer
-  vertex_buffer_data_.push_back(
-    space::core::BufferData(
-      physical_device, device, nvertices * sizeof(Vertex),
-      vk::BufferUsageFlagBits::eVertexBuffer));
-
-  const auto &vertex_data = vertex_buffer_data_.back();
-  // Submit them to the device
-  space::core::CopyToDevice(device, vertex_data.deviceMemory, mesh.vertices.data(), nvertices);
-
-  const unsigned int nindexes = mesh.indexes.size();
-  index_buffer_data_.push_back(
-    space::core::BufferData(
-      physical_device, device, nindexes * sizeof(uint16_t),
-      vk::BufferUsageFlagBits::eIndexBuffer));
-
-  const auto &index_data = index_buffer_data_.back();
-
-  // Submit them to the device
-  space::core::CopyToDevice(device, index_data.deviceMemory, mesh.indexes.data(), nindexes);
-  meshes_.push_back(mesh);
+void Scene::AddEntity(space::Entity *entity) {
+  // Initialize entity
+  entity->Register(vk_ctx_, &r_ctx_.pipeline_layout, &r_ctx_.render_pass,
+                   &r_ctx_.pipeline_cache);
+  entities_.push_back(entity);
 }
 
-
-void StaticWireframeScene3D::SubmitRendering() {
+void Scene::SubmitRendering() {
   const vk::UniqueDevice &device = vk_ctx_->device;
   const space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
   const vk::Queue &graphics_queue = r_ctx_.graphics_queue;
   const vk::UniqueCommandBuffer &command_buffer = r_ctx_.command_buffer;
   const vk::UniqueRenderPass &render_pass = r_ctx_.render_pass;
   const std::vector<vk::UniqueFramebuffer> &framebuffers = r_ctx_.framebuffers;
-  const vk::UniquePipeline &graphics_pipeline = r_ctx_.graphics_pipeline;
   const vk::UniquePipelineLayout &pipeline_layout = r_ctx_.pipeline_layout;
   const vk::UniqueDescriptorSet &descriptor_set = r_ctx_.descriptor_set;
   const space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
@@ -204,7 +162,6 @@ void StaticWireframeScene3D::SubmitRendering() {
   space::core::CopyToDevice(
     device, uniform_buffer_data.deviceMemory,  projection_matrices_.clip
     * projection_matrices_.projection * projection_matrices_.view * projection_matrices_.model);
-
 
   // Get the index of the next available swapchain image:
   vk::UniqueSemaphore imageAcquiredSemaphore = device->createSemaphoreUnique(vk::SemaphoreCreateInfo());
@@ -228,24 +185,22 @@ void StaticWireframeScene3D::SubmitRendering() {
 
   command_buffer->beginRenderPass(
     renderPassBeginInfo, vk::SubpassContents::eInline);
-  command_buffer->bindPipeline(
-    vk::PipelineBindPoint::eGraphics, graphics_pipeline.get());
-  command_buffer->bindDescriptorSets(
-    vk::PipelineBindPoint::eGraphics, pipeline_layout.get(), 0, descriptor_set.get(), nullptr);
 
-  command_buffer->bindVertexBuffers(0, *vertex_buffer_data_.back().buffer, {0});
-  command_buffer->bindIndexBuffer(*index_buffer_data_.back().buffer, 0, vk::IndexType::eUint16);
+   command_buffer->bindDescriptorSets(
+     vk::PipelineBindPoint::eGraphics, pipeline_layout.get(), 0, descriptor_set.get(), nullptr);
 
-  command_buffer->setViewport(
-    0, vk::Viewport(
-      0.0f, 0.0f,
-      static_cast<float>(surface_data.extent.width),
-      static_cast<float>(surface_data.extent.height), 0.0f, 1.0f));
-  command_buffer->setScissor(
-    0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
+   command_buffer->setViewport(
+     0, vk::Viewport(
+       0.0f, 0.0f,
+       static_cast<float>(surface_data.extent.width),
+       static_cast<float>(surface_data.extent.height), 0.0f, 1.0f));
+   command_buffer->setScissor(
+     0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
 
-  command_buffer->drawIndexed(meshes_.back().indexes.size(), 1, 0, 0, 0);
-  //command_buffer->draw(12 * 3, 1, 0, 0);
+   for (const auto entity : entities_) {
+     entity->Draw(command_buffer);
+   }
+
   command_buffer->endRenderPass();
   command_buffer->end();
 
@@ -255,7 +210,7 @@ void StaticWireframeScene3D::SubmitRendering() {
   graphics_queue.submit(submitInfo, draw_fence_.get());
 }
 
-void StaticWireframeScene3D::Present() {
+void Scene::Present() {
   vk::UniqueDevice &device = vk_ctx_->device;
   space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
   vk::Queue &present_queue = r_ctx_.present_queue;
@@ -267,7 +222,7 @@ void StaticWireframeScene3D::Present() {
 }
 
 
-struct StaticWireframeScene3D::Projection StaticWireframeScene3D::UpdateProjectionMatrices() {
+struct Scene::Projection Scene::UpdateProjectionMatrices() {
 
   vk::Extent2D &extent = vk_ctx_->surface_data.extent;
 
@@ -286,7 +241,7 @@ struct StaticWireframeScene3D::Projection StaticWireframeScene3D::UpdateProjecti
   return Projection{ fov, model, view, projection, clip };
 }
 
-void StaticWireframeScene3D::Input(CameraControls &input) {
+void Scene::Input(CameraControls &input) {
   // camera basis
   glm::vec3 nx = glm::normalize(camera_.center - camera_.eye); // front
   glm::vec3 nz = glm::normalize(glm::cross(-nx, glm::vec3(0.0f, 1.0f, 0.0f))); // side
@@ -302,7 +257,6 @@ void StaticWireframeScene3D::Input(CameraControls &input) {
   auto transform = glm::rotate(glm::mat4x4(1.0f), input.dphi * 0.001f, -ny);
   camera_.center = transform * (glm::vec4(camera_.center - camera_.eye, 1.0));
   camera_.center += camera_.eye;
-
 
   // Rotate w.r.t nz camera center.
   auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dtheta * 0.001f, -nz);
