@@ -33,8 +33,6 @@
 
 #include "vulkan-core.h"
 #include "scene.h"
-#include "shaders/simple.frag.h"
-#include "shaders/simple.vert.h"
 
 #define FENCE_TIMEOUT 100000000
 
@@ -112,16 +110,6 @@ Scene::RenderingContext Scene::InitRenderingContext() {
   space::core::UpdateDescriptorSets(
     device, descriptor_set,
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
-
-  vk::UniqueShaderModule vertex =
-    device->createShaderModuleUnique(
-      vk::ShaderModuleCreateInfo(
-        vk::ShaderModuleCreateFlags(), sizeof(simple_vert), simple_vert));
-
-  vk::UniqueShaderModule frag =
-    device->createShaderModuleUnique(
-      vk::ShaderModuleCreateInfo(
-        vk::ShaderModuleCreateFlags(), sizeof(simple_frag), simple_frag));
 
   vk::UniquePipelineCache pipeline_cache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());

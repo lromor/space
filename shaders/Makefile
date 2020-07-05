@@ -1,5 +1,5 @@
 
-SHADERS=simple.vert.h simple.frag.h grid.vert.h grid.frag.h
+SHADERS=curve.vert.h curve.frag.h grid.vert.h grid.frag.h
 
 all: $(SHADERS)
 

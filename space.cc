@@ -26,7 +26,7 @@
 #include "scene.h"
 #include "reference-grid.h"
 #include "gamepad.h"
-
+#include "curve.h"
 
 
 static void gamepad2camera(
@@ -143,8 +143,10 @@ int main(int argc, char *argv[]) {
   {
     Scene scene(&vk_ctx);
     ReferenceGrid reference_grid;
+    Curve curve;
 
     scene.AddEntity(&reference_grid);
+    scene.AddEntity(&curve);
     XSelectInput(display, window,
                  ExposureMask
                  | KeyPressMask

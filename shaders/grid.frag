@@ -20,7 +20,9 @@ void main(void) {
     float ydelta = fwidth(y) * 2.5;
     y = smoothstep(y - ydelta, y + ydelta, thickness);
 
-    float c = clamp(x + y, 0.1, 1.0);
+    float c = clamp(x + y, 0.0, 1.0);
 
+    // Transparent if c near black.
+    if (c < 0.1) discard;
     outColor = vec4(c, c, c, 1.0);
 }
