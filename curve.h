@@ -16,16 +16,29 @@
 #define __CURVE_H_
 
 #include <vulkan/vulkan.hpp>
+#include <sstream>
 
 #include "vulkan-core.h"
 #include "entity.h"
 
+struct Point {
+  float x, y, z;
+  std::string to_string() const {
+    std::ostringstream output;
+    output << "{ ";
+    output << x << ", ";
+    output << y << ", ";
+    output << z << " }";
+    return output.str();
+  }
+};
+
+Point operator* (const float scalar, const Point& point);
+Point operator* (const Point& point, const float scalar);
+Point operator+ (const Point& p1, const Point& p2);
+
 class Curve : public space::Entity {
 public:
-  struct Point {
-    float x, y, z;
-  };
-
   Curve() {}
   virtual void Register(
     space::core::VkAppContext *context,
