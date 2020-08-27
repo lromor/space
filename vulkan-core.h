@@ -19,6 +19,7 @@
 #ifndef __SPACE_CORE_H_
 #define __SPACE_CORE_H_
 
+#include <vector>
 #include <optional>
 
 #include <vulkan/vulkan.hpp>
@@ -60,12 +61,14 @@ namespace space {
     };
 
     struct VkAppContext {
+      vk::DynamicLoader dynamic_loader;
       vk::UniqueInstance instance;
+      vk::UniqueDevice device;
+      vk::UniqueDebugUtilsMessengerEXT debug_utils_messenger;
       vk::PhysicalDevice physical_device;
       SurfaceData surface_data;
       uint32_t graphics_queue_family_index;
       uint32_t present_queue_family_index;
-      vk::UniqueDevice device;
     };
 
     // Takes care of the super boring Vulkan bootstraping.

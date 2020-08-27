@@ -19,12 +19,15 @@
 // vulkan handles (instance, physical devices, logical devices) required
 // to perform rendering/compute/present operations.
 
+#include <cstdio>
 #include <iostream>
 #include <optional>
 #include <vulkan/vulkan.hpp>
 #include <X11/Xlib.h>
 
 #include "vulkan-core.h"
+
+VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE;
 
 // Given a physical device search for queues that can both "present" and do "graphics"
 // If possible pick a family that support both.
@@ -153,72 +156,50 @@ std::optional<vk::PresentModeKHR> PickPresentMode(
   return picked_mode;
 }
 
-static std::pair<std::vector<std::string>, std::vector<std::string>> GetEnabledLayersAndExtensions(
-  std::vector<std::string> instance_layers, std::vector<std::string> instance_extensions) {
-      std::vector<vk::LayerProperties> layer_properties = vk::enumerateInstanceLayerProperties();
-      std::vector<vk::ExtensionProperties> extension_properties = vk::enumerateInstanceExtensionProperties();
+// Requires as input a vector of strings of requested
+// layers and extensions. Returns the pair of layers and extensions objects
+// available in the vulkan implementation.
+static std::pair<std::vector<std::string>, std::vector<std::string>> GetInstanceEnabledLayersAndExtensions(
+  std::vector<std::string> requested_layers,
+  std::vector<std::string> requested_extensions) {
+  std::vector<vk::LayerProperties> layers = vk::enumerateInstanceLayerProperties();
+  std::vector<vk::ExtensionProperties> extensions = vk::enumerateInstanceExtensionProperties();
 
-      std::vector<std::string> enabled_layers;
-      enabled_layers.reserve(instance_layers.size());
-      for (auto const& layer : instance_layers) {
-        assert(
-          std::find_if(
-            layer_properties.begin(), layer_properties.end(),
-            [layer](vk::LayerProperties const& lp) {
-              return layer == lp.layerName;
-            }) != layer_properties.end());
-        enabled_layers.push_back(layer.data());
-      }
+  std::vector<std::string> enabled_layers;
+  enabled_layers.reserve(requested_layers.size());
+  for (auto const& layer : requested_layers) {
+    const bool layer_is_present = std::find_if(
+      layers.begin(), layers.end(),
+      [layer](vk::LayerProperties const& lp) {
+        return layer == lp.layerName;
+      }) != layers.end();
 
-#ifndef NDEBUG
-      // Enable standard validation layer to find as much errors as possible!
-      if (std::find(
-            instance_layers.begin(), instance_layers.end(),
-            "VK_LAYER_KHRONOS_validation") == instance_layers.end()
-          && std::find_if(
-            layer_properties.begin(), layer_properties.end(),
-            [](vk::LayerProperties const& lp) {
-              return (strcmp("VK_LAYER_KHRONOS_validation", lp.layerName) == 0);
-            }) != layer_properties.end()) {
-        enabled_layers.push_back("VK_LAYER_KHRONOS_validation");
-      }
-      if (std::find(
-            instance_layers.begin(), instance_layers.end(),
-            "VK_LAYER_LUNARG_assistant_layer") == instance_layers.end()
-          && std::find_if(
-            layer_properties.begin(), layer_properties.end(),
-            [](vk::LayerProperties const& lp) {
-              return (strcmp("VK_LAYER_LUNARG_assistant_layer", lp.layerName) == 0);
-            }) != layer_properties.end()) {
-        enabled_layers.push_back("VK_LAYER_LUNARG_assistant_layer");
-      }
-#endif
+    if (!layer_is_present) {
+      fprintf(stderr, "Could not find Vulkan instance layer: %s\n", layer.c_str());
+      continue;
+    }
 
-      std::vector<std::string> enabled_extensions;
-      enabled_extensions.reserve(instance_extensions.size());
-      for (auto const& ext : instance_extensions) {
-        assert(
-          std::find_if(
-            extension_properties.begin(), extension_properties.end(),
-            [ext](vk::ExtensionProperties const& ep) {
-              return ext == ep.extensionName;
-            }) != extension_properties.end());
-        enabled_extensions.push_back(ext.data());
-      }
+    enabled_layers.push_back(layer.data());
+  }
 
-#ifndef NDEBUG
-      if (std::find(
-            instance_extensions.begin(), instance_extensions.end(),
-            VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == instance_extensions.end()
-          && std::find_if(
-            extension_properties.begin(), extension_properties.end(),
-            [](vk::ExtensionProperties const& ep) {
-              return (strcmp(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, ep.extensionName) == 0);
-            }) != extension_properties.end()) {
-        enabled_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-      }
-#endif
-      return {enabled_layers, enabled_extensions};
+  std::vector<std::string> enabled_extensions;
+  enabled_extensions.reserve(requested_extensions.size());
+  for (auto const& ext : requested_extensions) {
+    const bool extension_is_present = std::find_if(
+      extensions.begin(), extensions.end(),
+      [ext](vk::ExtensionProperties const& ep) {
+        return ext == ep.extensionName;
+      }) != extensions.end();
+
+    if (!extension_is_present) {
+      fprintf(stderr, "Could not find Vulkan instance extension: %s\n", ext.c_str());
+      continue;
+    }
+
+    enabled_extensions.push_back(ext.data());
+  }
+
+  return {enabled_layers, enabled_extensions};
 }
 
 #ifndef NDEBUG
@@ -270,21 +251,39 @@ VkBool32 DebugUtilsMessengerCallback(
   }
   return VK_TRUE;
 }
-
 #endif
 
 
 namespace space {
   namespace core {
-
     std::optional<VkAppContext> InitVulkan(
       const VkAppConfig config, Display *display, Window window) {
-      auto res = GetEnabledLayersAndExtensions(config.instance_layers, config.instance_extensions);
+
+      // Setup dynamic dispatcher
+      static vk::DynamicLoader dl;
+      PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr =
+        dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+      VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+
+      auto requested_layers = config.instance_layers;
+      auto requested_extensions = config.instance_extensions;
+
+#ifndef NDEBUG
+      fprintf(stdout, "Enabling debug layers and extensions...\n");
+      requested_layers.push_back("VK_LAYER_KHRONOS_validation");
+      requested_layers.push_back("VK_LAYER_LUNARG_standard_validation");
+      requested_layers.push_back("VK_LAYER_LUNARG_assistant_layer");
+      requested_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+#endif
+
+      auto le = GetInstanceEnabledLayersAndExtensions(requested_layers, requested_extensions);
+
+      // Copy in a vector of const chars*.
       std::vector<const char*> enabled_instance_layers;
       std::vector<const char*> enabled_instance_extensions;
-      for (auto &l : res.first)
+      for (auto &l : le.first)
         enabled_instance_layers.push_back(l.c_str());
-      for (auto &e : res.second)
+      for (auto &e : le.second)
         enabled_instance_extensions.push_back(e.c_str());
 
       vk::ApplicationInfo application_info(
@@ -297,9 +296,11 @@ namespace space {
         enabled_instance_extensions.data());
 
       vk::UniqueInstance instance = vk::createInstanceUnique(instance_create_info);
+      VULKAN_HPP_DEFAULT_DISPATCHER.init(*instance);
+
+      vk::UniqueDebugUtilsMessengerEXT debug_utils_messenger;
 
 #ifndef NDEBUG
-      static vk::DispatchLoaderDynamic dl(*instance);
       vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning
         | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
@@ -308,11 +309,11 @@ namespace space {
         | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance
         | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
 
-      auto debug_utils_messenger =
+      debug_utils_messenger =
         instance->createDebugUtilsMessengerEXTUnique(
           vk::DebugUtilsMessengerCreateInfoEXT(
             {}, severityFlags, messageTypeFlags,
-            &DebugUtilsMessengerCallback), nullptr, dl);
+            &DebugUtilsMessengerCallback), nullptr);
 #endif
 
       // For now we just pick the first device. We should improve the code by
@@ -352,12 +353,14 @@ namespace space {
       vk::UniqueDevice device = CreateDevice(
         physical_device, graphics_and_present_queue_family_index.first,
         device_extensions, &physical_device_features);
+      VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
 
       return VkAppContext{
-        std::move(instance), physical_device, std::move(surface_data),
-          graphics_and_present_queue_family_index.first,
-          graphics_and_present_queue_family_index.second,
-          std::move(device)};
+        std::move(dl), std::move(instance), std::move(device),
+        std::move(debug_utils_messenger),
+        physical_device, std::move(surface_data),
+        graphics_and_present_queue_family_index.first,
+        graphics_and_present_queue_family_index.second};
     }
   }
 }

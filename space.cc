@@ -92,16 +92,12 @@ int main(int argc, char *argv[]) {
 
 #ifndef NDEBUG
   std::cout << "Debug mode on" << std::endl;
-  const struct space::core::VkAppConfig config = {
-    "Space", "SpaceEngine", {
-      "VK_LAYER_LUNARG_standard_validation" },
-    { VK_KHR_SURFACE_EXTENSION_NAME,
-      VK_KHR_XLIB_SURFACE_EXTENSION_NAME }};
-#else
+#endif
+
   const struct space::core::VkAppConfig config = {
     "Space", "SpaceEngine", {},
-    {VK_KHR_SURFACE_EXTENSION_NAME, VK_KHR_XLIB_SURFACE_EXTENSION_NAME}};
-#endif
+    { VK_KHR_SURFACE_EXTENSION_NAME,
+      VK_KHR_XLIB_SURFACE_EXTENSION_NAME }};
 
   std::unique_ptr<Gamepad> gamepad;
   int gamepad_fd = -1;
@@ -116,6 +112,7 @@ int main(int argc, char *argv[]) {
   const unsigned kWidth = 1024;
   const unsigned kHeight = 768;
 
+  XInitThreads();
   Display *display = XOpenDisplay(NULL);
   if (display == NULL) {
     fprintf(stderr, "Couldn't open display.");
@@ -170,7 +167,6 @@ int main(int argc, char *argv[]) {
     auto start = std::chrono::steady_clock::now();
 
     for (;;) {
-
       FD_ZERO(&read_fds);
       FD_SET(x11_fd, &read_fds);
       if (gamepad_fd > 0)
@@ -206,9 +202,9 @@ int main(int argc, char *argv[]) {
         scene.SubmitRendering();
         scene.Present();
       }
-   }
+    }
   }
- 
+
   XCloseDisplay(display);
   return 0;
 }
