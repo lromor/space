@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
 
+#include <X11/X.h>
 #include <iostream>
 #include <optional>
 #include <memory>
@@ -28,6 +29,13 @@
 #include "gamepad.h"
 #include "curve.h"
 
+std::optional<vk::Extent2D> get_xlib_window_extent(Display *display, Window window) {
+  XWindowAttributes attrs;
+  if (XGetWindowAttributes(display, window, &attrs)) {
+    return vk::Extent2D(attrs.width, attrs.height);
+  }
+  return {};
+}
 
 static void gamepad2camera(
   CameraControls *camera_controls, const struct EventData &data) {
@@ -138,7 +146,12 @@ int main(int argc, char *argv[]) {
   // as we want to avoid its destruction after
   // the display is closed with XCloseDisplay().
   {
-    Scene scene(&vk_ctx);
+    Scene scene(&vk_ctx, [display, window] () {
+      XWindowAttributes attrs;
+      XGetWindowAttributes(display, window, &attrs);
+      return vk::Extent2D(attrs.width, attrs.height);
+    });
+
     scene.Init();
     ReferenceGrid reference_grid;
     Curve curve;
@@ -148,6 +161,7 @@ int main(int argc, char *argv[]) {
     XSelectInput(display, window,
                  ExposureMask
                  | KeyPressMask
+                 | StructureNotifyMask
                  | PointerMotionMask);
     XMapWindow(display, window);
     XFlush(display);
@@ -189,8 +203,11 @@ int main(int argc, char *argv[]) {
       if (FD_ISSET(x11_fd, &read_fds)) {
         while(XPending(display)) {
           XNextEvent(display, &e);
-          if (e.type == KeyPress) {
+
+          switch (e.type) {
+          case KeyPress:
             exit = true;
+            break;
           }
         }
       }

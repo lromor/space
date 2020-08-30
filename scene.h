@@ -42,7 +42,10 @@ struct CameraControls {
 // perform rendering of the entities.
 class Scene {
 public:
-  Scene(space::core::VkAppContext *context);
+
+  typedef std::function<vk::Extent2D()> QueryExtentCallback;
+
+  Scene(space::core::VkAppContext *context, const QueryExtentCallback &fn);
 
   void Init();
   void AddEntity(space::Entity *entity);
@@ -52,6 +55,8 @@ public:
 
 private:
   space::core::VkAppContext *const vk_ctx_;
+  const QueryExtentCallback QueryExtent;
+
   vk::UniqueCommandPool command_pool_;
   vk::Queue graphics_queue_;
   vk::Queue present_queue_;
@@ -87,7 +92,7 @@ private:
   std::unique_ptr<SwapChainContext> swap_chain_context_;
 
   // Creates a new swapchain and returns the old one.
-  void CreateSwapChain();
+  void CreateSwapChainContext();
 
   uint32_t current_buffer_;
 

@@ -14,7 +14,7 @@
 // limitations under the License.
 // Modifications copyright (C) 2020 Leonardo Romor <leonardo.romor@gmail.com>
 //
-// This file contains the represents an intermediate interface simplify vulkan.
+// This file contains the represents an intermediate interface to simplify vulkan.
 
 #ifndef __SPACE_CORE_H_
 #define __SPACE_CORE_H_
@@ -47,12 +47,9 @@ VULKAN_HPP_INLINE TargetType checked_cast(SourceType value) {
 
 namespace space {
   namespace core {
-    // Vulkan initialization routines
-    struct SurfaceData {
-      vk::UniqueSurfaceKHR surface;
-      vk::Extent2D extent;
-    };
-
+    // Hold the Vulkan configuration data
+    // such as application name, engine,
+    // and requested instance layers and extensions.
     struct VkAppConfig {
       const char *app_name;
       const char *engine_name;
@@ -60,13 +57,18 @@ namespace space {
       std::vector<std::string> instance_extensions;
     };
 
+    // Holds the vulkan datacstructures
+    // used to represent the vulkan implementation,
+    // instantiation and configuration. It does not
+    // include any rendering related vullkan calls or
+    // data structures.
     struct VkAppContext {
       vk::DynamicLoader dynamic_loader;
       vk::UniqueInstance instance;
+      vk::UniqueSurfaceKHR surface;
       vk::UniqueDevice device;
       vk::UniqueDebugUtilsMessengerEXT debug_utils_messenger;
       vk::PhysicalDevice physical_device;
-      SurfaceData surface_data;
       uint32_t graphics_queue_family_index;
       uint32_t present_queue_family_index;
     };
@@ -86,6 +88,7 @@ namespace space {
         uint32_t graphics_family_index,
         uint32_t present_family_index);
       vk::Format color_format;
+      vk::Extent2D extent;
       vk::UniqueSwapchainKHR swap_chain;
       std::vector<vk::Image> images;
       std::vector<vk::UniqueImageView> image_views;

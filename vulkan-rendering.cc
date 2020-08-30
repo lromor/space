@@ -19,6 +19,7 @@
 // found here.
 
 #include <numeric>
+#include <vulkan/vulkan.hpp>
 
 #include "vulkan-core.h"
 
@@ -82,8 +83,7 @@ namespace space {
       vk::SurfaceKHR const& surface, vk::Extent2D const& extent, vk::ImageUsageFlags usage,
       vk::UniqueSwapchainKHR const& old_swap_chain, uint32_t graphics_queue_family_index,
       uint32_t present_queue_family_index) {
-
-      vk::SurfaceFormatKHR surface_format =PickSurfaceFormat(
+      vk::SurfaceFormatKHR surface_format = ::PickSurfaceFormat(
         physical_device.getSurfaceFormatsKHR(surface)).value();
       color_format = surface_format.format;
 
@@ -137,6 +137,7 @@ namespace space {
         swapChainCreateInfo.pQueueFamilyIndices = queueFamilyIndices;
       }
       swap_chain = device->createSwapchainKHRUnique(swapChainCreateInfo);
+      this->extent = swap_chain_extent;
 
       images = device->getSwapchainImagesKHR(swap_chain.get());
 

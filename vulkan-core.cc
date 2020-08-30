@@ -74,14 +74,6 @@ std::optional<std::pair<uint32_t, uint32_t>> FindGraphicsAndPresentQueueFamilyIn
   return {};
 }
 
-std::optional<vk::Extent2D> get_xlib_window_extent(Display *display, Window window) {
-  XWindowAttributes attrs;
-  if (XGetWindowAttributes(display, window, &attrs)) {
-    return vk::Extent2D(attrs.width, attrs.height);
-  }
-  return {};
-}
-
 vk::UniqueDevice CreateDevice(
   vk::PhysicalDevice physical_device, uint32_t queue_family_index,
   std::vector<std::string> const& extensions = {},
@@ -321,23 +313,15 @@ namespace space {
       // possibly configurable policy.
       vk::PhysicalDevice physical_device = instance->enumeratePhysicalDevices().front();
 
-      vk::Extent2D extent;
-      if (auto res = get_xlib_window_extent(display, window)) {
-        extent = res.value();
-      } else {
-        fprintf(stderr, "Coudldn't guess the xlib window extent.");
-        return {};
-      }
       // Init the surface
-      struct SurfaceData surface_data = {
+      vk::UniqueSurfaceKHR surface =
         instance->createXlibSurfaceKHRUnique(
-          vk::XlibSurfaceCreateInfoKHR(vk::XlibSurfaceCreateFlagsKHR(), display, window)),
-        extent};
+          vk::XlibSurfaceCreateInfoKHR(vk::XlibSurfaceCreateFlagsKHR(), display, window));
 
       // Find devices for present and graphics.
       std::pair<uint32_t, uint32_t> graphics_and_present_queue_family_index;
       if (const auto o = FindGraphicsAndPresentQueueFamilyIndex(
-            physical_device, *surface_data.surface)) {
+            physical_device, *surface)) {
         graphics_and_present_queue_family_index = o.value();
       } else {
         fprintf(stderr, "Couldn't find suitable Present or Graphics queues.");
@@ -356,9 +340,12 @@ namespace space {
       VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
 
       return VkAppContext{
-        std::move(dl), std::move(instance), std::move(device),
+        std::move(dl),
+        std::move(instance),
+        std::move(surface),
+        std::move(device),
         std::move(debug_utils_messenger),
-        physical_device, std::move(surface_data),
+        physical_device,
         graphics_and_present_queue_family_index.first,
         graphics_and_present_queue_family_index.second};
     }
