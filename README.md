@@ -40,3 +40,7 @@ devices mapped by evdev. In my case then:
 ```
 
 will allow you to control the camera using the gamepad.
+
+# Resources
+
+- [Dos and Don'ts](https://developer.nvidia.com/blog/vulkan-dos-donts/)
