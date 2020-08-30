@@ -44,6 +44,7 @@ class Scene {
 public:
   Scene(space::core::VkAppContext *context);
 
+  void Init();
   void AddEntity(space::Entity *entity);
   void Input(CameraControls &input);
   void SubmitRendering();
@@ -51,13 +52,21 @@ public:
 
 private:
   space::core::VkAppContext *const vk_ctx_;
+  vk::UniqueCommandPool command_pool_;
+  vk::Queue graphics_queue_;
+  vk::Queue present_queue_;
 
-  struct RenderingContext {
-    vk::UniqueCommandPool command_pool;
+  vk::UniqueDescriptorSetLayout descriptor_set_layout_;
+
+  // The pipeline layout used to describe
+  // how descriptors should be used.
+  vk::UniquePipelineLayout pipeline_layout_;
+  vk::UniquePipelineCache pipeline_cache_;
+
+  // Define the set of objects to be recreated
+  // in case of an out-of-date swapchain.
+  struct SwapChainContext {
     vk::UniqueCommandBuffer command_buffer;
-    vk::Queue graphics_queue;
-    vk::Queue present_queue;
-
     space::core::SwapChainData swap_chain_data;
 
     // Depth buffer data. Contains the resulting
@@ -68,23 +77,17 @@ private:
     // and other shared buffers.
     space::core::BufferData uniform_buffer_data;
 
-    vk::UniqueDescriptorSetLayout descriptor_set_layout;
-
-    // The pipeline layout used to describe
-    // how descriptors should be used.
-    vk::UniquePipelineLayout pipeline_layout;
-
     // We are using a single render pass
     vk::UniqueRenderPass render_pass;
     std::vector<vk::UniqueFramebuffer> framebuffers;
     vk::UniqueDescriptorPool descriptor_pool;
     vk::UniqueDescriptorSet descriptor_set;
-    vk::UniquePipelineCache pipeline_cache;
   };
 
-  // Initialize the rendering context
-  struct RenderingContext InitRenderingContext();
-  RenderingContext r_ctx_;
+  std::unique_ptr<SwapChainContext> swap_chain_context_;
+
+  // Creates a new swapchain and returns the old one.
+  void CreateSwapChain();
 
   uint32_t current_buffer_;
 

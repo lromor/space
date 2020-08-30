@@ -37,36 +37,51 @@
 #define FENCE_TIMEOUT 100000000
 
 Scene::Scene(space::core::VkAppContext *vk_ctx)
-  : vk_ctx_(vk_ctx), r_ctx_(InitRenderingContext()),
-    current_buffer_(0),
+  : vk_ctx_(vk_ctx), current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
     camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
     projection_matrices_(UpdateProjectionMatrices()) {}
 
-Scene::RenderingContext Scene::InitRenderingContext() {
-  vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
-  space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+void Scene::Init() {
   vk::UniqueDevice &device = vk_ctx_->device;
+
+  const uint32_t graphics_queue_family_index = vk_ctx_->graphics_queue_family_index;
+  const uint32_t present_queue_family_index = vk_ctx_->present_queue_family_index;
 
   // For multi threaded applications, we should create a command pool
   // for each thread. For this example, we just need one as we go
   // with async single core app.
+  command_pool_ =
+    space::core::CreateCommandPool(vk_ctx_->device, graphics_queue_family_index);
+  graphics_queue_ = device->getQueue(graphics_queue_family_index, 0);
+  present_queue_ = device->getQueue(present_queue_family_index, 0);
+
+  descriptor_set_layout_ =
+    space::core::CreateDescriptorSetLayout(
+      device, { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex} });
+  pipeline_layout_ =
+    device->createPipelineLayoutUnique(
+      vk::PipelineLayoutCreateInfo(
+        vk::PipelineLayoutCreateFlags(), 1, &descriptor_set_layout_.get()));
+
+  pipeline_cache_ =
+    device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
+
+  CreateSwapChain();
+}
+
+void Scene::CreateSwapChain() {
+  vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
+  space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  vk::UniqueDevice &device = vk_ctx_->device;
   const uint32_t graphics_queue_family_index = vk_ctx_->graphics_queue_family_index;
   const uint32_t present_queue_family_index = vk_ctx_->present_queue_family_index;
-  vk::UniqueCommandPool command_pool =
-    space::core::CreateCommandPool(vk_ctx_->device, graphics_queue_family_index);
 
   vk::UniqueCommandBuffer command_buffer =
     std::move(
       device->allocateCommandBuffersUnique(
         vk::CommandBufferAllocateInfo(
-          command_pool.get(),
-          vk::CommandBufferLevel::ePrimary, 1)).front());
-
-  vk::Queue graphics_queue =
-    device->getQueue(graphics_queue_family_index, 0);
-  vk::Queue present_queue =
-    device->getQueue(present_queue_family_index, 0);
+          *command_pool_, vk::CommandBufferLevel::ePrimary, 1)).front());
 
   space::core::SwapChainData swap_chain_data(
     physical_device, device, *surface_data.surface, surface_data.extent,
@@ -80,14 +95,6 @@ Scene::RenderingContext Scene::InitRenderingContext() {
   space::core::BufferData uniform_buffer_data(
     physical_device, device, sizeof(glm::mat4x4),
     vk::BufferUsageFlagBits::eUniformBuffer);
-
-  vk::UniqueDescriptorSetLayout descriptor_set_layout =
-    space::core::CreateDescriptorSetLayout(
-      device, { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex} });
-  vk::UniquePipelineLayout pipeline_layout =
-    device->createPipelineLayoutUnique(
-      vk::PipelineLayoutCreateInfo(
-        vk::PipelineLayoutCreateFlags(), 1, &descriptor_set_layout.get()));
 
   vk::UniqueRenderPass render_pass =
     space::core::CreateRenderPass(
@@ -105,7 +112,7 @@ Scene::RenderingContext Scene::InitRenderingContext() {
   vk::UniqueDescriptorSet descriptor_set =
     std::move(
       device->allocateDescriptorSetsUnique(
-        vk::DescriptorSetAllocateInfo(*descriptor_pool, 1, &*descriptor_set_layout)).front());
+        vk::DescriptorSetAllocateInfo(*descriptor_pool, 1, &*descriptor_set_layout_)).front());
 
   space::core::UpdateDescriptorSets(
     device, descriptor_set,
@@ -114,34 +121,32 @@ Scene::RenderingContext Scene::InitRenderingContext() {
   vk::UniquePipelineCache pipeline_cache =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
 
-  Scene::RenderingContext r_ctx{
-    std::move(command_pool), std::move(command_buffer), graphics_queue, present_queue,
-    std::move(swap_chain_data), std::move(depth_buffer_data), std::move(uniform_buffer_data),
-    std::move(descriptor_set_layout), std::move(pipeline_layout),
-    std::move(render_pass), std::move(framebuffers), std::move(descriptor_pool),
-    std::move(descriptor_set), std::move(pipeline_cache)};
+  struct SwapChainContext *swap_chain_context = new SwapChainContext{
+    std::move(command_buffer), std::move(swap_chain_data), std::move(depth_buffer_data),
+      std::move(uniform_buffer_data), std::move(render_pass), std::move(framebuffers),
+      std::move(descriptor_pool), std::move(descriptor_set)};
 
-  return r_ctx;
+  swap_chain_context_.reset(swap_chain_context);
 }
 
 void Scene::AddEntity(space::Entity *entity) {
   // Initialize entity
-  entity->Register(vk_ctx_, &r_ctx_.pipeline_layout, &r_ctx_.render_pass,
-                   &r_ctx_.pipeline_cache);
+  entity->Register(vk_ctx_, &pipeline_layout_, &swap_chain_context_->render_pass,
+                   &pipeline_cache_);
   entities_.push_back(entity);
 }
 
 void Scene::SubmitRendering() {
   const vk::UniqueDevice &device = vk_ctx_->device;
-  const space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
-  const vk::Queue &graphics_queue = r_ctx_.graphics_queue;
-  const vk::UniqueCommandBuffer &command_buffer = r_ctx_.command_buffer;
-  const vk::UniqueRenderPass &render_pass = r_ctx_.render_pass;
-  const std::vector<vk::UniqueFramebuffer> &framebuffers = r_ctx_.framebuffers;
-  const vk::UniquePipelineLayout &pipeline_layout = r_ctx_.pipeline_layout;
-  const vk::UniqueDescriptorSet &descriptor_set = r_ctx_.descriptor_set;
+  const space::core::SwapChainData &swap_chain_data = swap_chain_context_->swap_chain_data;
+  const vk::Queue &graphics_queue = graphics_queue_;
+  const vk::UniqueCommandBuffer &command_buffer = swap_chain_context_->command_buffer;
+  const vk::UniqueRenderPass &render_pass = swap_chain_context_->render_pass;
+  const std::vector<vk::UniqueFramebuffer> &framebuffers = swap_chain_context_->framebuffers;
+  const vk::UniquePipelineLayout &pipeline_layout = pipeline_layout_;
+  const vk::UniqueDescriptorSet &descriptor_set = swap_chain_context_->descriptor_set;
   const space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
-  const space::core::BufferData &uniform_buffer_data = r_ctx_.uniform_buffer_data;
+  const space::core::BufferData &uniform_buffer_data = swap_chain_context_->uniform_buffer_data;
 
   // Update the projection matrices with the current values of camera, model, fov, etc..
   projection_matrices_ = UpdateProjectionMatrices();
@@ -158,7 +163,7 @@ void Scene::SubmitRendering() {
       swap_chain_data.swap_chain.get(), FENCE_TIMEOUT,
       imageAcquiredSemaphore.get(), nullptr);
   assert(res.result == vk::Result::eSuccess);
-  assert(res.value < r_ctx_.framebuffers.size());
+  assert(res.value < swap_chain_context_->framebuffers.size());
   current_buffer_ = res.value;
   command_buffer->begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlags()));
 
@@ -200,8 +205,8 @@ void Scene::SubmitRendering() {
 
 void Scene::Present() {
   vk::UniqueDevice &device = vk_ctx_->device;
-  space::core::SwapChainData &swap_chain_data = r_ctx_.swap_chain_data;
-  vk::Queue &present_queue = r_ctx_.present_queue;
+  space::core::SwapChainData &swap_chain_data = swap_chain_context_->swap_chain_data;
+  vk::Queue &present_queue = present_queue_;
 
   while (vk::Result::eTimeout
          == device->waitForFences(draw_fence_.get(), VK_TRUE, FENCE_TIMEOUT)) { usleep(1000); }

@@ -139,6 +139,7 @@ int main(int argc, char *argv[]) {
   // the display is closed with XCloseDisplay().
   {
     Scene scene(&vk_ctx);
+    scene.Init();
     ReferenceGrid reference_grid;
     Curve curve;
 
