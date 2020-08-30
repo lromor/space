@@ -16,7 +16,6 @@
 //
 // This file contains the basic ingredients to render a basic wireframed scene.
 // This simple scene allows you to add meshes and a freely "movable" camera.
-
 #include <unistd.h>
 #include <iostream>
 #include <optional>
@@ -36,11 +35,11 @@
 
 #define FENCE_TIMEOUT 100000000
 
-Scene::Scene(space::core::VkAppContext *vk_ctx)
-  : vk_ctx_(vk_ctx), current_buffer_(0),
+Scene::Scene(space::core::VkAppContext *vk_ctx,  const QueryExtentCallback &fn)
+  : vk_ctx_(vk_ctx),  QueryExtent(fn), current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
     camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
-    projection_matrices_(UpdateProjectionMatrices()) {}
+    projection_matrices_({0}) {}
 
 void Scene::Init() {
   vk::UniqueDevice &device = vk_ctx_->device;
@@ -67,30 +66,35 @@ void Scene::Init() {
   pipeline_cache_ =
     device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
 
-  CreateSwapChain();
+  CreateSwapChainContext();
 }
 
-void Scene::CreateSwapChain() {
+void Scene::CreateSwapChainContext() {
   vk::PhysicalDevice &physical_device = vk_ctx_->physical_device;
-  space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
+  vk::UniqueSurfaceKHR &surface = vk_ctx_->surface;
   vk::UniqueDevice &device = vk_ctx_->device;
   const uint32_t graphics_queue_family_index = vk_ctx_->graphics_queue_family_index;
   const uint32_t present_queue_family_index = vk_ctx_->present_queue_family_index;
 
+  const vk::Extent2D extent = QueryExtent();
   vk::UniqueCommandBuffer command_buffer =
     std::move(
       device->allocateCommandBuffersUnique(
         vk::CommandBufferAllocateInfo(
           *command_pool_, vk::CommandBufferLevel::ePrimary, 1)).front());
 
+  // Wait device to be idle before destroying everything
+  if (swap_chain_context_)
+    device->waitIdle();
+
   space::core::SwapChainData swap_chain_data(
-    physical_device, device, *surface_data.surface, surface_data.extent,
+    physical_device, device, *surface, extent,
     vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc,
-    vk::UniqueSwapchainKHR(), graphics_queue_family_index,
-    present_queue_family_index);
+    swap_chain_context_ ? std::move(swap_chain_context_->swap_chain_data.swap_chain) : vk::UniqueSwapchainKHR(),
+    graphics_queue_family_index, present_queue_family_index);
 
   space::core::DepthBufferData depth_buffer_data(
-    physical_device, device, vk::Format::eD16Unorm, surface_data.extent);
+    physical_device, device, vk::Format::eD16Unorm, swap_chain_data.extent);
 
   space::core::BufferData uniform_buffer_data(
     physical_device, device, sizeof(glm::mat4x4),
@@ -100,12 +104,12 @@ void Scene::CreateSwapChain() {
     space::core::CreateRenderPass(
       device, space::core::PickSurfaceFormat(
         physical_device.getSurfaceFormatsKHR(
-          surface_data.surface.get()))->format, depth_buffer_data.format);
+          *surface))->format, depth_buffer_data.format);
 
   std::vector<vk::UniqueFramebuffer> framebuffers =
     space::core::CreateFramebuffers(
       device, render_pass, swap_chain_data.image_views,
-      depth_buffer_data.image_view, surface_data.extent);
+      depth_buffer_data.image_view, swap_chain_data.extent);
 
   vk::UniqueDescriptorPool descriptor_pool =
     space::core::CreateDescriptorPool(device, { {vk::DescriptorType::eUniformBuffer, 1} });
@@ -127,6 +131,11 @@ void Scene::CreateSwapChain() {
       std::move(descriptor_pool), std::move(descriptor_set)};
 
   swap_chain_context_.reset(swap_chain_context);
+
+  for (const auto entity : entities_) {
+    entity->Register(vk_ctx_, &pipeline_layout_, &swap_chain_context_->render_pass,
+                     &pipeline_cache_);
+  }
 }
 
 void Scene::AddEntity(space::Entity *entity) {
@@ -145,7 +154,6 @@ void Scene::SubmitRendering() {
   const std::vector<vk::UniqueFramebuffer> &framebuffers = swap_chain_context_->framebuffers;
   const vk::UniquePipelineLayout &pipeline_layout = pipeline_layout_;
   const vk::UniqueDescriptorSet &descriptor_set = swap_chain_context_->descriptor_set;
-  const space::core::SurfaceData &surface_data = vk_ctx_->surface_data;
   const space::core::BufferData &uniform_buffer_data = swap_chain_context_->uniform_buffer_data;
 
   // Update the projection matrices with the current values of camera, model, fov, etc..
@@ -158,13 +166,27 @@ void Scene::SubmitRendering() {
 
   // Get the index of the next available swapchain image:
   vk::UniqueSemaphore imageAcquiredSemaphore = device->createSemaphoreUnique(vk::SemaphoreCreateInfo());
-  vk::ResultValue<uint32_t> res =
-    device->acquireNextImageKHR(
-      swap_chain_data.swap_chain.get(), FENCE_TIMEOUT,
-      imageAcquiredSemaphore.get(), nullptr);
-  assert(res.result == vk::Result::eSuccess);
-  assert(res.value < swap_chain_context_->framebuffers.size());
-  current_buffer_ = res.value;
+
+  bool out_of_date = false;
+  try {
+    vk::ResultValue<uint32_t> res =
+      device->acquireNextImageKHR(
+        swap_chain_data.swap_chain.get(), FENCE_TIMEOUT,
+        imageAcquiredSemaphore.get(), nullptr);
+    if (res.result == vk::Result::eSuboptimalKHR)
+      out_of_date = true;
+    assert(res.value < swap_chain_context_->framebuffers.size());
+    current_buffer_ = res.value;
+  } catch (vk::OutOfDateKHRError &) {
+    out_of_date = true;
+  }
+  if (out_of_date) {
+    // Re-create the swapchain context.
+    CreateSwapChainContext();
+    // Re-submit rendering
+    return SubmitRendering();
+  }
+
   command_buffer->begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlags()));
 
   vk::ClearValue clear_values[2];
@@ -174,7 +196,7 @@ void Scene::SubmitRendering() {
     vk::ClearDepthStencilValue(1.0f, 0);
   vk::RenderPassBeginInfo renderPassBeginInfo(
     render_pass.get(), framebuffers[current_buffer_].get(),
-    vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent), 2, clear_values);
+    vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent), 2, clear_values);
 
   command_buffer->beginRenderPass(
     renderPassBeginInfo, vk::SubpassContents::eInline);
@@ -185,10 +207,10 @@ void Scene::SubmitRendering() {
    command_buffer->setViewport(
      0, vk::Viewport(
        0.0f, 0.0f,
-       static_cast<float>(surface_data.extent.width),
-       static_cast<float>(surface_data.extent.height), 0.0f, 1.0f));
+       static_cast<float>(swap_chain_data.extent.width),
+       static_cast<float>(swap_chain_data.extent.height), 0.0f, 1.0f));
    command_buffer->setScissor(
-     0, vk::Rect2D(vk::Offset2D(0, 0), surface_data.extent));
+     0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent));
 
    for (const auto entity : entities_) {
      entity->Draw(&command_buffer);
@@ -210,14 +232,18 @@ void Scene::Present() {
 
   while (vk::Result::eTimeout
          == device->waitForFences(draw_fence_.get(), VK_TRUE, FENCE_TIMEOUT)) { usleep(1000); }
-  present_queue.presentKHR(
-    vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
+
+  try {
+    present_queue.presentKHR(
+      vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
+  } catch (vk::OutOfDateKHRError &) {
+      // Re-create the swapchain context.
+    CreateSwapChainContext();
+  }
 }
 
-
 struct Scene::Projection Scene::UpdateProjectionMatrices() {
-
-  vk::Extent2D &extent = vk_ctx_->surface_data.extent;
+  vk::Extent2D extent = swap_chain_context_->swap_chain_data.extent;
 
   float fov = glm::radians(60.0f);
   const auto aspect_ratio =
