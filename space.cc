@@ -12,9 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
-
 #define XK_MISCELLANY
-
+#define XK_LATIN1
 #include <getopt.h>
 #include <stdlib.h>
 
@@ -148,11 +147,13 @@ int main(int argc, char *argv[]) {
     ReferenceGrid reference_grid;
     Curve curve;
 
+    char keys[32];
     scene.AddEntity(&reference_grid);
     scene.AddEntity(&curve);
     XSelectInput(display, window,
                  ExposureMask
                  | KeyPressMask
+                 | KeyReleaseMask
                  | PointerMotionMask);
     XMapWindow(display, window);
     XFlush(display);
@@ -195,26 +196,26 @@ int main(int argc, char *argv[]) {
         while(XPending(display)) {
           XNextEvent(display, &e);
           if (e.type == KeyPress || e.type == KeyRelease) {
-            const bool isKeyReleased = (e.type == KeyRelease);
+            XQueryKeymap(display, keys);
             const KeySym keysym = XLookupKeysym((XKeyEvent*) &e, 0);
-            fprintf(stderr, "key-%s %lx\n", e.type == KeyPress ? "dn" : "up",
-                    keysym);
-            const float move_value = isKeyReleased ? 0 : 0.1;
+            const int idx = XKeysymToKeycode(display, keysym);
+            const bool key_bit = keys[idx / 8] & ( 0x1 << (idx % 8));
+            const float move_value = 1.0 * key_bit;
             switch (keysym) {
-            case XK_Right:
-              gamepad2camera(&controls, { -move_value, RIGHT_STICK_X, false});
+            case XK_w:
+              gamepad2camera(&controls, { -move_value, LEFT_STICK_Y, false});
               break;
 
-            case XK_Left:
-              gamepad2camera(&controls, { +move_value, RIGHT_STICK_X, false});
+            case XK_s:
+              gamepad2camera(&controls, { +move_value, LEFT_STICK_Y, false});
               break;
 
-            case XK_Up:
-              gamepad2camera(&controls, { +move_value, RIGHT_STICK_Y, false});
+            case XK_a:
+              gamepad2camera(&controls, { -move_value, LEFT_STICK_X, false});
               break;
 
-            case XK_Down:
-              gamepad2camera(&controls, { -move_value, RIGHT_STICK_Y, false});
+            case XK_d:
+              gamepad2camera(&controls, { +move_value, LEFT_STICK_X, false});
               break;
 
             case XK_Escape:
