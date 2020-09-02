@@ -13,20 +13,26 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
 
-#include <iostream>
-#include <optional>
-#include <memory>
-#include <chrono>
+#define XK_MISCELLANY
+
 #include <getopt.h>
 #include <stdlib.h>
+
 #include <X11/Xlib.h>
+#include <X11/keysymdef.h>
+
+#include <chrono>
+#include <iostream>
+#include <memory>
+#include <optional>
+
 #include <vulkan/vulkan.hpp>
 
-#include "vulkan-core.h"
-#include "scene.h"
-#include "reference-grid.h"
-#include "gamepad.h"
 #include "curve.h"
+#include "gamepad.h"
+#include "reference-grid.h"
+#include "scene.h"
+#include "vulkan-core.h"
 
 
 static void gamepad2camera(
@@ -188,8 +194,42 @@ int main(int argc, char *argv[]) {
       if (FD_ISSET(x11_fd, &read_fds)) {
         while(XPending(display)) {
           XNextEvent(display, &e);
-          if (e.type == KeyPress) {
-            exit = true;
+          if (e.type == KeyPress || e.type == KeyRelease) {
+            const bool isKeyReleased = (e.type == KeyRelease);
+            EventData myev;
+            myev.is_button = false;
+            const KeySym keysym = XLookupKeysym((XKeyEvent*) &e, 0);
+            fprintf(stderr, "key-%s %lx\n", e.type == KeyPress ? "dn" : "up",
+                    keysym);
+            switch (keysym) {
+            case XK_Right:
+              myev.value = isKeyReleased ? 0 : -0.1;
+              myev.source = RIGHT_STICK_X;
+              gamepad2camera(&controls, myev);
+              break;
+
+            case XK_Left:
+              myev.value = isKeyReleased ? 0 : +0.1;
+              myev.source = RIGHT_STICK_X;
+              gamepad2camera(&controls, myev);
+              break;
+
+            case XK_Up:
+              myev.value = isKeyReleased ? 0 : +0.1;
+              myev.source = RIGHT_STICK_Y;
+              gamepad2camera(&controls, myev);
+              break;
+
+            case XK_Down:
+              myev.value = isKeyReleased ? 0 : -0.1;
+              myev.source = RIGHT_STICK_Y;
+              gamepad2camera(&controls, myev);
+              break;
+
+            case XK_Escape:
+              exit = true;
+              break;
+            }
           }
         }
       }
