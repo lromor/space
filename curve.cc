@@ -146,6 +146,8 @@ void Curve::Register(
     vk::UniqueRenderPass *render_pass,
     vk::UniquePipelineCache *pipeline_cache) {
 
+  points_.clear();
+
   // Instantiate the shaders
   vk::UniqueShaderModule vertex =
     context->device->createShaderModuleUnique(
