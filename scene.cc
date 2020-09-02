@@ -122,9 +122,6 @@ void Scene::CreateSwapChainContext() {
     device, descriptor_set,
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
 
-  vk::UniquePipelineCache pipeline_cache =
-    device->createPipelineCacheUnique(vk::PipelineCacheCreateInfo());
-
   struct SwapChainContext *swap_chain_context = new SwapChainContext{
     std::move(command_buffer), std::move(swap_chain_data), std::move(depth_buffer_data),
       std::move(uniform_buffer_data), std::move(render_pass), std::move(framebuffers),
