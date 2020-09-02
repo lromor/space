@@ -196,34 +196,25 @@ int main(int argc, char *argv[]) {
           XNextEvent(display, &e);
           if (e.type == KeyPress || e.type == KeyRelease) {
             const bool isKeyReleased = (e.type == KeyRelease);
-            EventData myev;
-            myev.is_button = false;
             const KeySym keysym = XLookupKeysym((XKeyEvent*) &e, 0);
             fprintf(stderr, "key-%s %lx\n", e.type == KeyPress ? "dn" : "up",
                     keysym);
+            const float move_value = isKeyReleased ? 0 : 0.1;
             switch (keysym) {
             case XK_Right:
-              myev.value = isKeyReleased ? 0 : -0.1;
-              myev.source = RIGHT_STICK_X;
-              gamepad2camera(&controls, myev);
+              gamepad2camera(&controls, { -move_value, RIGHT_STICK_X, false});
               break;
 
             case XK_Left:
-              myev.value = isKeyReleased ? 0 : +0.1;
-              myev.source = RIGHT_STICK_X;
-              gamepad2camera(&controls, myev);
+              gamepad2camera(&controls, { +move_value, RIGHT_STICK_X, false});
               break;
 
             case XK_Up:
-              myev.value = isKeyReleased ? 0 : +0.1;
-              myev.source = RIGHT_STICK_Y;
-              gamepad2camera(&controls, myev);
+              gamepad2camera(&controls, { +move_value, RIGHT_STICK_Y, false});
               break;
 
             case XK_Down:
-              myev.value = isKeyReleased ? 0 : -0.1;
-              myev.source = RIGHT_STICK_Y;
-              gamepad2camera(&controls, myev);
+              gamepad2camera(&controls, { -move_value, RIGHT_STICK_Y, false});
               break;
 
             case XK_Escape:
