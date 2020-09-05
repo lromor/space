@@ -2,7 +2,7 @@ CXX=g++
 
 CFLAGS=-g -O0 -Wall -DVK_USE_PLATFORM_XLIB_KHR -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -std=c++17
 CFLAGS+=-I/usr/include/libevdev-1.0
-LD_FLAGS=-lvulkan -lX11 -levdev -ldl
+LD_FLAGS=-lvulkan -lX11 -lXi -levdev -ldl
 
 OBJECTS=vulkan-core.o vulkan-rendering.o scene.o gamepad.o \
 	vulkan-pipeline.o reference-grid.o curve.o

@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+#include <X11/extensions/XI2.h>
 #define XK_MISCELLANY
 #define XK_LATIN1
 
@@ -19,12 +20,14 @@
 #include <stdlib.h>
 
 #include <X11/Xlib.h>
+#include <X11/extensions/XInput2.h>
 #include <X11/keysymdef.h>
 
 #include <chrono>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <utility>
 
 #include <vulkan/vulkan.hpp>
 
@@ -33,6 +36,40 @@
 #include "reference-grid.h"
 #include "scene.h"
 #include "vulkan-core.h"
+
+Cursor InvisibleCursor(Display *display, Window window) {
+  Cursor invisible_cursor;
+  Pixmap no_pixmap;
+  XColor black;
+  static char nothing[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+  no_pixmap = XCreateBitmapFromData(display, window, nothing, 8, 8);
+  invisible_cursor = XCreatePixmapCursor(
+    display, no_pixmap, no_pixmap, &black, &black, 0, 0);
+  return invisible_cursor;
+}
+
+std::pair<double, double> GetRawDataValues(XIRawEvent *event, double *dx, double *dy) {
+  double *val = event->valuators.values;
+  std::vector<double> values;
+  for (int i = 0; i < event->valuators.mask_len * 8; i++) {
+    if (XIMaskIsSet(event->valuators.mask, i))
+      values.push_back(*val++);
+  }
+  return { values[0], values[1] };
+}
+
+void GetCurrentPointerPosition(Display *display, Window window, int device, double *win_x, double *win_y) {
+  Window returned_root, returned_child;
+  double root_x, root_y;
+  XIButtonState buttons;
+  XIModifierState mods;
+  XIGroupState group;
+  XIQueryPointer(
+    display, device, window,
+    &returned_root, &returned_child,
+    &root_x, &root_y, win_x, win_y, &buttons, &mods, &group);
+}
 
 std::optional<vk::Extent2D> get_xlib_window_extent(Display *display, Window window) {
   XWindowAttributes attrs;
@@ -132,11 +169,20 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  int x11_fd = ConnectionNumber(display);
+  int x11_fd = XConnectionNumber(display);
   int screen = XDefaultScreen(display);
   Window root_window = XRootWindow(display, screen);
   Window window = XCreateSimpleWindow(
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
+  XEvent event;
+  int xi_opcode, xi_event, xi_error;
+  XIEventMask mask;
+  XGenericEventCookie *cookie = (XGenericEventCookie*) &event.xcookie;
+
+  if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &xi_event, &xi_error)) {
+    fprintf(stderr, "X Input extension not available.\n");
+    return 1;
+  }
 
   space::core::VkAppContext vk_ctx;
 
@@ -146,6 +192,31 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Couldn't initialize vulkan.");
     return 1;
   }
+
+
+  mask.deviceid = XIAllDevices;
+  mask.mask_len = XIMaskLen(XI_LASTEVENT);
+  mask.mask = new unsigned char[mask.mask_len]();
+  XISetMask(mask.mask, XI_ButtonPress);
+  XISetMask(mask.mask, XI_ButtonRelease);
+  XISetMask(mask.mask, XI_KeyPress);
+  XISetMask(mask.mask, XI_KeyRelease);
+
+  XISelectEvents(display, window, &mask, 1);
+
+  XSelectInput(display, window, ExposureMask);
+  XMapWindow(display, window);
+  XSync(display, False);
+
+  delete mask.mask;
+
+  XMaskEvent(display, ExposureMask, &event);
+  XSelectInput(display, window, 0);
+
+  XIDeviceEvent *device_data;
+  XIRawEvent *raw_data;
+  int pointer_device;
+  double last_win_x, last_win_y;
 
   // We create the scene inside the scope
   // as we want to avoid its destruction after
@@ -157,26 +228,16 @@ int main(int argc, char *argv[]) {
       return vk::Extent2D(attrs.width, attrs.height);
     });
 
-    scene.Init();
     ReferenceGrid reference_grid;
     Curve curve;
 
-    char keys[32];
+    scene.Init();
     scene.AddEntity(&reference_grid);
     scene.AddEntity(&curve);
-    XSelectInput(display, window,
-                 ExposureMask
-                 | KeyPressMask
-                 | KeyReleaseMask
-                 | StructureNotifyMask
-                 | PointerMotionMask);
-    XMapWindow(display, window);
-    XFlush(display);
 
     const int max_fd = std::max(x11_fd, gamepad_fd) + 1;
     struct timeval timeout;
     fd_set read_fds;
-    XEvent e;
     bool exit = false;
 
     CameraControls controls = {};
@@ -209,36 +270,113 @@ int main(int argc, char *argv[]) {
 
       if (FD_ISSET(x11_fd, &read_fds)) {
         while(XPending(display)) {
-          XNextEvent(display, &e);
-          if (e.type == KeyPress || e.type == KeyRelease) {
-            XQueryKeymap(display, keys);
-            const KeySym keysym = XLookupKeysym((XKeyEvent*) &e, 0);
-            const int idx = XKeysymToKeycode(display, keysym);
-            const bool key_bit = keys[idx / 8] & ( 0x1 << (idx % 8));
-            const float move_value = 1.0 * key_bit;
-            switch (keysym) {
-            case XK_w:
-              gamepad2camera(&controls, { -move_value, LEFT_STICK_Y, false});
-              break;
-
-            case XK_s:
-              gamepad2camera(&controls, { +move_value, LEFT_STICK_Y, false});
-              break;
-
-            case XK_a:
-              gamepad2camera(&controls, { -move_value, LEFT_STICK_X, false});
-              break;
-
-            case XK_d:
-              gamepad2camera(&controls, { +move_value, LEFT_STICK_X, false});
-              break;
-
-            case XK_Escape:
-              exit = true;
+          XNextEvent(display, &event);
+          if (XGetEventData(display, cookie) &&
+              cookie->type == GenericEvent &&
+              cookie->extension == xi_opcode) {
+            switch (cookie->evtype) {
+            case XI_ButtonPress: {
+              device_data = (XIDeviceEvent *)cookie->data;
+              if (device_data->detail == Button1) {
+                XIGetClientPointer(display, window, &pointer_device);
+                GetCurrentPointerPosition(
+                  display, window, pointer_device, &last_win_x, &last_win_y);
+                mask = XIEventMask();
+                mask.deviceid = XIAllMasterDevices;
+                mask.mask_len = XIMaskLen(XI_LASTEVENT);
+                mask.mask = new unsigned char[mask.mask_len]();
+                XISetMask(mask.mask, XI_RawMotion);
+                XIGrabDevice(display, pointer_device, window, CurrentTime,
+                             InvisibleCursor(display, window),
+                             XIGrabModeAsync, XIGrabModeAsync, True, &mask);
+                delete mask.mask;
+              }
               break;
             }
+            case XI_ButtonRelease: {
+              device_data = (XIDeviceEvent *)cookie->data;
+              if (device_data->detail == Button1) {
+                mask = XIEventMask();
+                mask.deviceid = XIAllMasterDevices;
+                mask.mask_len = XIMaskLen(XI_LASTEVENT);
+                mask.mask = new unsigned char[mask.mask_len]();
+                XISelectEvents(display, DefaultRootWindow(display), &mask, 1);
+                XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
+                XIUngrabDevice(display, pointer_device, CurrentTime);
+
+                gamepad2camera(&controls, { 0, RIGHT_STICK_X, false});
+                gamepad2camera(&controls, { 0, RIGHT_STICK_Y, false});
+              }
+              break;
+            }
+            case XI_RawMotion: {
+              raw_data = (XIRawEvent *)cookie->data;
+              auto values = GetRawDataValues(raw_data, NULL, NULL);
+              gamepad2camera(&controls, { (float) values.first, RIGHT_STICK_X, false});
+              gamepad2camera(&controls, { (float) values.second, RIGHT_STICK_Y, false});
+              break;
+            }
+            case XI_KeyRelease: {
+              device_data = (XIDeviceEvent *)cookie->data;
+              bool is_repeat = device_data->flags & XIKeyRepeat;
+              if (!is_repeat){
+                switch (device_data->detail) {
+                case 25:
+                  gamepad2camera(&controls, { 0, LEFT_STICK_Y, false});
+                  break;
+
+                case 39:
+                  gamepad2camera(&controls, { 0, LEFT_STICK_Y, false});
+                  break;
+
+                case 38:
+                  gamepad2camera(&controls, { 0, LEFT_STICK_X, false});
+                  break;
+
+                case 40:
+                  gamepad2camera(&controls, { 0, LEFT_STICK_X, false});
+                  break;
+
+                case 9:
+                  exit = true;
+                  break;
+                }
+                break;
+              }
+            }
+            case XI_KeyPress: {
+              device_data = (XIDeviceEvent *)cookie->data;
+              const float move_value = 1.0;
+              switch (device_data->detail) {
+              case 25:
+                gamepad2camera(&controls, { -move_value, LEFT_STICK_Y, false});
+                break;
+
+              case 39:
+                gamepad2camera(&controls, { +move_value, LEFT_STICK_Y, false});
+                break;
+
+              case 38:
+                gamepad2camera(&controls, { -move_value, LEFT_STICK_X, false});
+                break;
+
+              case 40:
+                gamepad2camera(&controls, { +move_value, LEFT_STICK_X, false});
+                break;
+
+              case 9:
+                exit = true;
+                break;
+              }
+            }
+            }
+            XFreeEventData(display, cookie);
           }
         }
+      } else {
+        // Idle
+        gamepad2camera(&controls, { 0, RIGHT_STICK_X, false});
+        gamepad2camera(&controls, { 0, RIGHT_STICK_Y, false});
       }
 
       if (exit) break;
