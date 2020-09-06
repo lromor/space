@@ -38,7 +38,7 @@
 Scene::Scene(space::core::VkAppContext *vk_ctx,  const QueryExtentCallback &fn)
   : vk_ctx_(vk_ctx),  QueryExtent(fn), current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
-    camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 2.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
+    camera_{glm::vec3(0.0f, 2.0f, -15.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
     projection_matrices_({0}) {}
 
 void Scene::Init() {
@@ -258,24 +258,31 @@ struct Scene::Projection Scene::UpdateProjectionMatrices() {
 }
 
 void Scene::Input(CameraControls &input) {
+  // Remember: camera center is the point the camera is looking at.
+  // camera eye is the position of the camera in 3d space.
+  const float kTranslationFactor = 0.01f;
+  const float kRotationFactor = 0.001f;
+
   // camera basis
   glm::vec3 nx = glm::normalize(camera_.center - camera_.eye); // front
   glm::vec3 nz = glm::normalize(glm::cross(-nx, glm::vec3(0.0f, 1.0f, 0.0f))); // side
   glm::vec3 ny = glm::normalize(glm::cross(nx, nz)); // up
- 
-  // We want to keep fixed the distance between center and eye.
-  auto t = input.dy * 0.01f * nx - input.dx * 0.005f * nz;
+
+  // Translation vector (we using move in nx and nz direction)
+  auto t = input.dy * kTranslationFactor * nx + input.dx * kTranslationFactor * nz;
+
+  // Shift everything
   camera_.center += t;
   camera_.eye += t;
   camera_.up = ny;
 
   // Rotate w.r.t ny camera center.
-  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dphi * 0.001f, -ny);
+  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dphi * kRotationFactor,  glm::vec3(0.0f, 1.0f, 0.0f));
   camera_.center = transform * (glm::vec4(camera_.center - camera_.eye, 1.0));
   camera_.center += camera_.eye;
 
   // Rotate w.r.t nz camera center.
-  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dtheta * 0.001f, -nz);
+  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dtheta * kRotationFactor, nz);
   camera_.center = transform2 * (glm::vec4(camera_.center - camera_.eye, 1.0));
   camera_.center += camera_.eye;
 }

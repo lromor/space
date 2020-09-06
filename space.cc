@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
-#include <X11/extensions/XI2.h>
 #define XK_MISCELLANY
 #define XK_LATIN1
 
@@ -20,8 +19,10 @@
 #include <stdlib.h>
 
 #include <X11/Xlib.h>
+#include <X11/extensions/XI2.h>
 #include <X11/extensions/XInput2.h>
 #include <X11/keysymdef.h>
+#include <X11/XKBlib.h>
 
 #include <chrono>
 #include <iostream>
@@ -36,6 +37,43 @@
 #include "reference-grid.h"
 #include "scene.h"
 #include "vulkan-core.h"
+
+bool GetMasterPointerAndKeyboard(Display *display, int *pointer_device, int *keyboard_device) {
+  XIDeviceInfo *info;
+  int ndevices;
+  info = XIQueryDevice(display, XIAllDevices, &ndevices);
+  bool pointer_is_found = false;
+  bool keyboard_is_found = false;
+
+  // We select the first master pointer and keyboard.
+  for(int i = 0; i < ndevices; ++i) {
+    const XIDeviceInfo &dinfo = info[i];
+    switch(dinfo.use) {
+    case XIMasterPointer: {
+      if (!pointer_is_found) {
+        *pointer_device = dinfo.deviceid;
+#ifndef NDEBUG
+        fprintf(stdout, "Found pointer device: %s\n", dinfo.name);
+#endif
+        pointer_is_found = true;
+      }
+      break;
+    }
+    case XIMasterKeyboard: {
+      if (!keyboard_is_found) {
+        *keyboard_device = dinfo.deviceid;
+#ifndef NDEBUG
+        fprintf(stdout, "Found keyboard device: %s\n", dinfo.name);
+#endif
+        keyboard_is_found = true;
+      }
+      break;
+    }
+    }
+  }
+  XIFreeDeviceInfo(info);
+  return pointer_is_found && keyboard_is_found;
+}
 
 Cursor InvisibleCursor(Display *display, Window window) {
   Cursor invisible_cursor;
@@ -84,16 +122,16 @@ static void gamepad2camera(
   if (!data.is_button) {
     switch (data.source) {
     case LEFT_STICK_X:
-      camera_controls->dx = data.value;
+      camera_controls->dx = -data.value;
       return;
     case LEFT_STICK_Y:
-      camera_controls->dy = -1 * data.value;
+      camera_controls->dy = -data.value;
       return;
     case RIGHT_STICK_X:
-      camera_controls->dphi = data.value;
+      camera_controls->dphi = -data.value;
       return;
     case RIGHT_STICK_Y:
-      camera_controls->dtheta = -1 * data.value;
+      camera_controls->dtheta = data.value;
       return;
     default:
       return;
@@ -176,25 +214,23 @@ int main(int argc, char *argv[]) {
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
   XEvent event;
   int xi_opcode, xi_event, xi_error;
+  int pointer_device, keyboard_device;
   XIEventMask mask;
   XGenericEventCookie *cookie = (XGenericEventCookie*) &event.xcookie;
+  XIDeviceEvent *device_data;
+  XIRawEvent *raw_data;
+  double last_win_x, last_win_y;
 
   if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &xi_event, &xi_error)) {
     fprintf(stderr, "X Input extension not available.\n");
     return 1;
   }
 
-  space::core::VkAppContext vk_ctx;
+  // Find XI2 master pointer and keyboard.
+  GetMasterPointerAndKeyboard(display, &pointer_device, &keyboard_device);
 
-  if (auto ret = InitVulkan(config, display, window)) {
-    vk_ctx = std::move(ret.value());
-  } else {
-    fprintf(stderr, "Couldn't initialize vulkan.");
-    return 1;
-  }
-
-
-  mask.deviceid = XIAllDevices;
+  // Enable XI2 events.
+  mask.deviceid = XIAllMasterDevices;
   mask.mask_len = XIMaskLen(XI_LASTEVENT);
   mask.mask = new unsigned char[mask.mask_len]();
   XISetMask(mask.mask, XI_ButtonPress);
@@ -213,10 +249,15 @@ int main(int argc, char *argv[]) {
   XMaskEvent(display, ExposureMask, &event);
   XSelectInput(display, window, 0);
 
-  XIDeviceEvent *device_data;
-  XIRawEvent *raw_data;
-  int pointer_device;
-  double last_win_x, last_win_y;
+  // Initialize vulkan
+  space::core::VkAppContext vk_ctx;
+
+  if (auto ret = InitVulkan(config, display, window)) {
+    vk_ctx = std::move(ret.value());
+  } else {
+    fprintf(stderr, "Couldn't initialize vulkan.");
+    return 1;
+  }
 
   // We create the scene inside the scope
   // as we want to avoid its destruction after
@@ -240,15 +281,16 @@ int main(int argc, char *argv[]) {
     fd_set read_fds;
     bool exit = false;
 
-    CameraControls controls = {};
+    CameraControls camera_input = {};
+
     if (gamepad)
       gamepad->SetEventCallback(
-        [&controls](const struct EventData &data) {
-          gamepad2camera(&controls, data);
+        [&camera_input](const struct EventData &data) {
+          gamepad2camera(&camera_input, data);
         });
 
-    auto start = std::chrono::steady_clock::now();
 
+    auto start = std::chrono::steady_clock::now();
     for (;;) {
       FD_ZERO(&read_fds);
       FD_SET(x11_fd, &read_fds);
@@ -278,11 +320,9 @@ int main(int argc, char *argv[]) {
             case XI_ButtonPress: {
               device_data = (XIDeviceEvent *)cookie->data;
               if (device_data->detail == Button1) {
-                XIGetClientPointer(display, window, &pointer_device);
                 GetCurrentPointerPosition(
                   display, window, pointer_device, &last_win_x, &last_win_y);
-                mask = XIEventMask();
-                mask.deviceid = XIAllMasterDevices;
+                mask.deviceid = pointer_device;
                 mask.mask_len = XIMaskLen(XI_LASTEVENT);
                 mask.mask = new unsigned char[mask.mask_len]();
                 XISetMask(mask.mask, XI_RawMotion);
@@ -290,100 +330,51 @@ int main(int argc, char *argv[]) {
                              InvisibleCursor(display, window),
                              XIGrabModeAsync, XIGrabModeAsync, True, &mask);
                 delete mask.mask;
+                mask.deviceid = keyboard_device;
+                mask.mask_len = XIMaskLen(XI_LASTEVENT);
+                mask.mask = new unsigned char[mask.mask_len]();
+                XISetMask(mask.mask, XI_RawKeyPress);
+                XISetMask(mask.mask, XI_RawKeyRelease);
+                XIGrabDevice(display, keyboard_device, window, CurrentTime,
+                             None, XIGrabModeAsync, XIGrabModeAsync, True, &mask);
+                delete mask.mask;
               }
               break;
             }
             case XI_ButtonRelease: {
               device_data = (XIDeviceEvent *)cookie->data;
               if (device_data->detail == Button1) {
-                mask = XIEventMask();
-                mask.deviceid = XIAllMasterDevices;
-                mask.mask_len = XIMaskLen(XI_LASTEVENT);
-                mask.mask = new unsigned char[mask.mask_len]();
-                XISelectEvents(display, DefaultRootWindow(display), &mask, 1);
                 XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
                 XIUngrabDevice(display, pointer_device, CurrentTime);
-
-                gamepad2camera(&controls, { 0, RIGHT_STICK_X, false});
-                gamepad2camera(&controls, { 0, RIGHT_STICK_Y, false});
+                XIUngrabDevice(display, keyboard_device, CurrentTime);
               }
+              break;
+            }
+            case XI_KeyPress: {
+              device_data = (XIDeviceEvent *)cookie->data;
+              if (XkbKeycodeToKeysym(display, device_data->detail, 0, 0) == XK_Escape)
+                exit = true;
               break;
             }
             case XI_RawMotion: {
               raw_data = (XIRawEvent *)cookie->data;
               auto values = GetRawDataValues(raw_data, NULL, NULL);
-              gamepad2camera(&controls, { (float) values.first, RIGHT_STICK_X, false});
-              gamepad2camera(&controls, { (float) values.second, RIGHT_STICK_Y, false});
+              CameraControls input{0.0f, 0.0f, 0.0f, -(float) values.first, (float) values.second};
+              scene.Input(input);
+              XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
               break;
-            }
-            case XI_KeyRelease: {
-              device_data = (XIDeviceEvent *)cookie->data;
-              bool is_repeat = device_data->flags & XIKeyRepeat;
-              if (!is_repeat){
-                switch (device_data->detail) {
-                case 25:
-                  gamepad2camera(&controls, { 0, LEFT_STICK_Y, false});
-                  break;
-
-                case 39:
-                  gamepad2camera(&controls, { 0, LEFT_STICK_Y, false});
-                  break;
-
-                case 38:
-                  gamepad2camera(&controls, { 0, LEFT_STICK_X, false});
-                  break;
-
-                case 40:
-                  gamepad2camera(&controls, { 0, LEFT_STICK_X, false});
-                  break;
-
-                case 9:
-                  exit = true;
-                  break;
-                }
-                break;
-              }
-            }
-            case XI_KeyPress: {
-              device_data = (XIDeviceEvent *)cookie->data;
-              const float move_value = 1.0;
-              switch (device_data->detail) {
-              case 25:
-                gamepad2camera(&controls, { -move_value, LEFT_STICK_Y, false});
-                break;
-
-              case 39:
-                gamepad2camera(&controls, { +move_value, LEFT_STICK_Y, false});
-                break;
-
-              case 38:
-                gamepad2camera(&controls, { -move_value, LEFT_STICK_X, false});
-                break;
-
-              case 40:
-                gamepad2camera(&controls, { +move_value, LEFT_STICK_X, false});
-                break;
-
-              case 9:
-                exit = true;
-                break;
-              }
             }
             }
             XFreeEventData(display, cookie);
           }
         }
-      } else {
-        // Idle
-        gamepad2camera(&controls, { 0, RIGHT_STICK_X, false});
-        gamepad2camera(&controls, { 0, RIGHT_STICK_Y, false});
       }
 
       if (exit) break;
 
       auto delta = std::chrono::steady_clock::now() - start;
       if (std::chrono::duration_cast<std::chrono::milliseconds>(delta).count() > 16) {
-        scene.Input(controls);
+        scene.Input(camera_input);
         scene.SubmitRendering();
         scene.Present();
       }

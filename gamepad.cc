@@ -96,7 +96,11 @@ bool Gamepad::Impl::Init(const std::string &path) {
     printf("This device does not look like a gamepad.\n");
     return false;
   }
-  printf("Gamepad device name: \"%s\"\n", libevdev_get_name(dev_));
+
+#ifndef NDEBUG
+  fprintf(stdout, "Gamepad device name: \"%s\"\n", libevdev_get_name(dev_));
+#endif
+
   return true;
 }
 
