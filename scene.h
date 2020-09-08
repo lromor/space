@@ -52,6 +52,7 @@ public:
   void Input(CameraControls &input);
   void SubmitRendering();
   void Present();
+  void InputTrackball(float dx, float dy);
 
 private:
   space::core::VkAppContext *const vk_ctx_;

@@ -16,6 +16,11 @@
 //
 // This file contains the basic ingredients to render a basic wireframed scene.
 // This simple scene allows you to add meshes and a freely "movable" camera.
+#include <glm/ext/quaternion_common.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/fwd.hpp>
+#include <glm/gtx/norm.hpp>
+#include <glm/trigonometric.hpp>
 #include <unistd.h>
 #include <iostream>
 #include <optional>
@@ -24,11 +29,14 @@
 #include <numeric>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
+
 #include <glm/gtx/string_cast.hpp>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/rotate_vector.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #include "vulkan-core.h"
 #include "scene.h"
@@ -38,7 +46,7 @@
 Scene::Scene(space::core::VkAppContext *vk_ctx,  const QueryExtentCallback &fn)
   : vk_ctx_(vk_ctx),  QueryExtent(fn), current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
-    camera_{glm::vec3(0.0f, 2.0f, -15.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
+    camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
     projection_matrices_({0}) {}
 
 void Scene::Init() {
@@ -276,13 +284,39 @@ void Scene::Input(CameraControls &input) {
   camera_.eye += t;
   camera_.up = ny;
 
-  // Rotate w.r.t ny camera center.
-  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dphi * kRotationFactor,  glm::vec3(0.0f, 1.0f, 0.0f));
-  camera_.center = transform * (glm::vec4(camera_.center - camera_.eye, 1.0));
-  camera_.center += camera_.eye;
+  //pitch
+  //position = (Rotate(some angle, cameraRight) * (position - target)) + target;
+  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dtheta * kRotationFactor, -nz);
+  camera_.eye = transform * (glm::vec4(camera_.eye - camera_.center, 1.0));
+  camera_.eye += camera_.center;
 
-  // Rotate w.r.t nz camera center.
-  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dtheta * kRotationFactor, nz);
-  camera_.center = transform2 * (glm::vec4(camera_.center - camera_.eye, 1.0));
-  camera_.center += camera_.eye;
+  //yaw, Y-up system
+  //position = (Rotate(some other angle, (0,1,0)) * (position - target)) + target;
+  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dphi * kRotationFactor, glm::vec3(0.0f, 1.0f, 0.0f));
+  camera_.eye = transform2 * (glm::vec4(camera_.eye - camera_.center, 1.0));
+  camera_.eye += camera_.center;
+
+
+  // Creates an identity quaternion (no rotation)
+  //glm::quat q = glm::quat(cos(1e-3), 0.0f, sin(1e-3), 0.0f);
+  //auto m = glm::toMat4(q);
+  //camera_.eye = m * glm::vec4(camera_.eye, 1.0f);
+}
+
+void Scene::InputTrackball(float dx, float dy) {
+  glm::vec3 neye = glm::normalize(camera_.eye - camera_.center);
+  glm::vec3 nup = glm::normalize(camera_.up);
+  glm::vec3 nside = glm::normalize(glm::cross(nup, neye));
+
+  glm::vec3 new_up = nup * dy;
+  glm::vec3 new_side = nside * dx;
+
+  glm::vec3 new_direction = new_up + new_side;
+  glm::vec3 new_rot = glm::cross(new_direction, camera_.eye - camera_.center);
+  float angle = sqrt(dx * dx + dy * dy);
+  glm::angleAxis(angle, new_rot);
+
+  glm::mat4x4 transform = glm::toMat4(glm::angleAxis(angle, new_rot));
+  camera_.eye = transform * glm::vec4(camera_.eye, 1.0f);
+  camera_.up = transform * glm::vec4(camera_.up, 1.0f);
 }

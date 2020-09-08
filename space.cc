@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+#include <algorithm>
 #define XK_MISCELLANY
 #define XK_LATIN1
 
@@ -37,6 +38,7 @@
 #include "reference-grid.h"
 #include "scene.h"
 #include "vulkan-core.h"
+#include "trackball.h"
 
 bool GetMasterPointerAndKeyboard(Display *display, int *pointer_device, int *keyboard_device) {
   XIDeviceInfo *info;
@@ -259,15 +261,17 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  auto get_window_extent = [display, window] () {
+    XWindowAttributes attrs;
+    XGetWindowAttributes(display, window, &attrs);
+    return vk::Extent2D(attrs.width, attrs.height);
+  };
+
   // We create the scene inside the scope
   // as we want to avoid its destruction after
   // the display is closed with XCloseDisplay().
   {
-    Scene scene(&vk_ctx, [display, window] () {
-      XWindowAttributes attrs;
-      XGetWindowAttributes(display, window, &attrs);
-      return vk::Extent2D(attrs.width, attrs.height);
-    });
+    Scene scene(&vk_ctx, get_window_extent);
 
     ReferenceGrid reference_grid;
     Curve curve;
@@ -288,7 +292,6 @@ int main(int argc, char *argv[]) {
         [&camera_input](const struct EventData &data) {
           gamepad2camera(&camera_input, data);
         });
-
 
     auto start = std::chrono::steady_clock::now();
     for (;;) {
@@ -330,14 +333,6 @@ int main(int argc, char *argv[]) {
                              InvisibleCursor(display, window),
                              XIGrabModeAsync, XIGrabModeAsync, True, &mask);
                 delete mask.mask;
-                mask.deviceid = keyboard_device;
-                mask.mask_len = XIMaskLen(XI_LASTEVENT);
-                mask.mask = new unsigned char[mask.mask_len]();
-                XISetMask(mask.mask, XI_RawKeyPress);
-                XISetMask(mask.mask, XI_RawKeyRelease);
-                XIGrabDevice(display, keyboard_device, window, CurrentTime,
-                             None, XIGrabModeAsync, XIGrabModeAsync, True, &mask);
-                delete mask.mask;
               }
               break;
             }
@@ -346,7 +341,6 @@ int main(int argc, char *argv[]) {
               if (device_data->detail == Button1) {
                 XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
                 XIUngrabDevice(display, pointer_device, CurrentTime);
-                XIUngrabDevice(display, keyboard_device, CurrentTime);
               }
               break;
             }
@@ -359,8 +353,11 @@ int main(int argc, char *argv[]) {
             case XI_RawMotion: {
               raw_data = (XIRawEvent *)cookie->data;
               auto values = GetRawDataValues(raw_data, NULL, NULL);
-              CameraControls input{0.0f, 0.0f, 0.0f, -(float) values.first, (float) values.second};
-              scene.Input(input);
+              vk::Extent2D extent = get_window_extent();
+              int minor_axis = std::min(extent.width, extent.height) / 2;
+              const float dx = values.first / minor_axis;
+              const float dy = -values.second / minor_axis;
+              scene.InputTrackball(dx, dy);
               XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
               break;
             }
@@ -374,7 +371,7 @@ int main(int argc, char *argv[]) {
 
       auto delta = std::chrono::steady_clock::now() - start;
       if (std::chrono::duration_cast<std::chrono::milliseconds>(delta).count() > 16) {
-        scene.Input(camera_input);
+        //scene.Input(camera_input);
         scene.SubmitRendering();
         scene.Present();
       }
