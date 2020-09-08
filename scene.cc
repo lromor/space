@@ -16,11 +16,6 @@
 //
 // This file contains the basic ingredients to render a basic wireframed scene.
 // This simple scene allows you to add meshes and a freely "movable" camera.
-#include <glm/ext/quaternion_common.hpp>
-#include <glm/ext/quaternion_trigonometric.hpp>
-#include <glm/fwd.hpp>
-#include <glm/gtx/norm.hpp>
-#include <glm/trigonometric.hpp>
 #include <unistd.h>
 #include <iostream>
 #include <optional>
@@ -29,12 +24,6 @@
 #include <numeric>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
-
-#include <glm/gtx/string_cast.hpp>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 

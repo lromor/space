@@ -38,7 +38,6 @@
 #include "reference-grid.h"
 #include "scene.h"
 #include "vulkan-core.h"
-#include "trackball.h"
 
 bool GetMasterPointerAndKeyboard(Display *display, int *pointer_device, int *keyboard_device) {
   XIDeviceInfo *info;
@@ -330,7 +329,8 @@ int main(int argc, char *argv[]) {
                 mask.mask = new unsigned char[mask.mask_len]();
                 XISetMask(mask.mask, XI_RawMotion);
                 XIGrabDevice(display, pointer_device, window, CurrentTime,
-                             InvisibleCursor(display, window),
+                             //InvisibleCursor(display, window),
+                             None,
                              XIGrabModeAsync, XIGrabModeAsync, True, &mask);
                 delete mask.mask;
               }
@@ -339,7 +339,7 @@ int main(int argc, char *argv[]) {
             case XI_ButtonRelease: {
               device_data = (XIDeviceEvent *)cookie->data;
               if (device_data->detail == Button1) {
-                XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
+                //XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
                 XIUngrabDevice(display, pointer_device, CurrentTime);
               }
               break;
@@ -357,8 +357,7 @@ int main(int argc, char *argv[]) {
               int minor_axis = std::min(extent.width, extent.height) / 2;
               const float dx = values.first / minor_axis;
               const float dy = -values.second / minor_axis;
-              scene.InputTrackball(dx, dy);
-              XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
+              scene.InputTrackball(dx * 2, dy * 2);
               break;
             }
             }

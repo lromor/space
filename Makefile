@@ -5,7 +5,7 @@ CFLAGS+=-I/usr/include/libevdev-1.0
 LD_FLAGS=-lvulkan -lX11 -lXi -levdev -ldl
 
 OBJECTS=vulkan-core.o vulkan-rendering.o scene.o gamepad.o \
-	vulkan-pipeline.o reference-grid.o curve.o trackball.o
+	vulkan-pipeline.o reference-grid.o curve.o
 MAIN_OBJECTS=space.o
 
 DEPENDENCY_RULES=$(OBJECTS:=.d) $(MAIN_OBJECTS:=.d)
