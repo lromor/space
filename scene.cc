@@ -16,6 +16,7 @@
 //
 // This file contains the basic ingredients to render a basic wireframed scene.
 // This simple scene allows you to add meshes and a freely "movable" camera.
+#include <glm/ext/quaternion_geometric.hpp>
 #include <unistd.h>
 #include <iostream>
 #include <optional>
@@ -301,7 +302,7 @@ void Scene::InputTrackball(float dx, float dy) {
   glm::vec3 new_side = nside * dx;
 
   glm::vec3 new_direction = new_up + new_side;
-  glm::vec3 new_rot = glm::cross(new_direction, camera_.eye - camera_.center);
+  glm::vec3 new_rot = glm::normalize(glm::cross(new_direction, camera_.eye - camera_.center));
   float angle = sqrt(dx * dx + dy * dy);
   glm::angleAxis(angle, new_rot);
 
