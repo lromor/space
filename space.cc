@@ -328,6 +328,9 @@ int main(int argc, char *argv[]) {
                 mask.mask_len = XIMaskLen(XI_LASTEVENT);
                 mask.mask = new unsigned char[mask.mask_len]();
                 XISetMask(mask.mask, XI_RawMotion);
+                XISetMask(mask.mask, XI_ButtonPress);
+                XISetMask(mask.mask, XI_ButtonRelease);
+
                 XIGrabDevice(display, pointer_device, window, CurrentTime,
                              //InvisibleCursor(display, window),
                              None,
