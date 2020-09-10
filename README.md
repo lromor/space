@@ -41,6 +41,16 @@ devices mapped by evdev. In my case then:
 
 will allow you to control the camera using the gamepad.
 
+# TODOs
+- [ ] Add interpolated camera motion.
+- [ ] Create multicamera system.
+- [ ] Add IMGUI
+- [ ] Add multisampling for smooth images
+- [ ] Add double buffering
+- [ ] Add tessellated NURBS.
+- [ ] Add system to dynamically load shaders.
+
+
 # Resources
 
 - [Dos and Don'ts](https://developer.nvidia.com/blog/vulkan-dos-donts/)
