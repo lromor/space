@@ -12,6 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+#include "input/xinput2.h"
+#include <X11/X.h>
 #include <algorithm>
 #define XK_MISCELLANY
 #define XK_LATIN1
@@ -20,8 +22,6 @@
 #include <stdlib.h>
 
 #include <X11/Xlib.h>
-#include <X11/extensions/XI2.h>
-#include <X11/extensions/XInput2.h>
 #include <X11/keysymdef.h>
 #include <X11/XKBlib.h>
 
@@ -33,113 +33,13 @@
 
 #include <vulkan/vulkan.hpp>
 
+#include "camera.h"
 #include "curve.h"
-#include "gamepad.h"
+#include "input/gamepad.h"
 #include "reference-grid.h"
 #include "scene.h"
 #include "vulkan-core.h"
-
-bool GetMasterPointerAndKeyboard(Display *display, int *pointer_device, int *keyboard_device) {
-  XIDeviceInfo *info;
-  int ndevices;
-  info = XIQueryDevice(display, XIAllDevices, &ndevices);
-  bool pointer_is_found = false;
-  bool keyboard_is_found = false;
-
-  // We select the first master pointer and keyboard.
-  for(int i = 0; i < ndevices; ++i) {
-    const XIDeviceInfo &dinfo = info[i];
-    switch(dinfo.use) {
-    case XIMasterPointer: {
-      if (!pointer_is_found) {
-        *pointer_device = dinfo.deviceid;
-#ifndef NDEBUG
-        fprintf(stdout, "Found pointer device: %s\n", dinfo.name);
-#endif
-        pointer_is_found = true;
-      }
-      break;
-    }
-    case XIMasterKeyboard: {
-      if (!keyboard_is_found) {
-        *keyboard_device = dinfo.deviceid;
-#ifndef NDEBUG
-        fprintf(stdout, "Found keyboard device: %s\n", dinfo.name);
-#endif
-        keyboard_is_found = true;
-      }
-      break;
-    }
-    }
-  }
-  XIFreeDeviceInfo(info);
-  return pointer_is_found && keyboard_is_found;
-}
-
-Cursor InvisibleCursor(Display *display, Window window) {
-  Cursor invisible_cursor;
-  Pixmap no_pixmap;
-  XColor black;
-  static char nothing[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
-
-  no_pixmap = XCreateBitmapFromData(display, window, nothing, 8, 8);
-  invisible_cursor = XCreatePixmapCursor(
-    display, no_pixmap, no_pixmap, &black, &black, 0, 0);
-  return invisible_cursor;
-}
-
-std::pair<double, double> GetRawDataValues(XIRawEvent *event, double *dx, double *dy) {
-  double *val = event->valuators.values;
-  std::vector<double> values;
-  for (int i = 0; i < event->valuators.mask_len * 8; i++) {
-    if (XIMaskIsSet(event->valuators.mask, i))
-      values.push_back(*val++);
-  }
-  return { values[0], values[1] };
-}
-
-void GetCurrentPointerPosition(Display *display, Window window, int device, double *win_x, double *win_y) {
-  Window returned_root, returned_child;
-  double root_x, root_y;
-  XIButtonState buttons;
-  XIModifierState mods;
-  XIGroupState group;
-  XIQueryPointer(
-    display, device, window,
-    &returned_root, &returned_child,
-    &root_x, &root_y, win_x, win_y, &buttons, &mods, &group);
-}
-
-std::optional<vk::Extent2D> get_xlib_window_extent(Display *display, Window window) {
-  XWindowAttributes attrs;
-  if (XGetWindowAttributes(display, window, &attrs)) {
-    return vk::Extent2D(attrs.width, attrs.height);
-  }
-  return {};
-}
-
-static void gamepad2camera(
-  CameraControls *camera_controls, const struct EventData &data) {
-  if (!data.is_button) {
-    switch (data.source) {
-    case LEFT_STICK_X:
-      camera_controls->dx = -data.value;
-      return;
-    case LEFT_STICK_Y:
-      camera_controls->dy = -data.value;
-      return;
-    case RIGHT_STICK_X:
-      camera_controls->dphi = -data.value;
-      return;
-    case RIGHT_STICK_Y:
-      camera_controls->dtheta = data.value;
-      return;
-    default:
-      return;
-    }
-    return;
-  }
-}
+#include "interface-manager.h"
 
 static int usage(const char *prog, const char *msg) {
   if (msg) {
@@ -214,41 +114,19 @@ int main(int argc, char *argv[]) {
   Window window = XCreateSimpleWindow(
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
   XEvent event;
-  int xi_opcode, xi_event, xi_error;
-  int pointer_device, keyboard_device;
-  XIEventMask mask;
-  XGenericEventCookie *cookie = (XGenericEventCookie*) &event.xcookie;
-  XIDeviceEvent *device_data;
-  XIRawEvent *raw_data;
-  double last_win_x, last_win_y;
-
-  if (!XQueryExtension(display, "XInputExtension", &xi_opcode, &xi_event, &xi_error)) {
-    fprintf(stderr, "X Input extension not available.\n");
-    return 1;
-  }
-
-  // Find XI2 master pointer and keyboard.
-  GetMasterPointerAndKeyboard(display, &pointer_device, &keyboard_device);
-
-  // Enable XI2 events.
-  mask.deviceid = XIAllMasterDevices;
-  mask.mask_len = XIMaskLen(XI_LASTEVENT);
-  mask.mask = new unsigned char[mask.mask_len]();
-  XISetMask(mask.mask, XI_ButtonPress);
-  XISetMask(mask.mask, XI_ButtonRelease);
-  XISetMask(mask.mask, XI_KeyPress);
-  XISetMask(mask.mask, XI_KeyRelease);
-
-  XISelectEvents(display, window, &mask, 1);
 
   XSelectInput(display, window, ExposureMask);
   XMapWindow(display, window);
   XSync(display, False);
 
-  delete mask.mask;
-
   XMaskEvent(display, ExposureMask, &event);
   XSelectInput(display, window, 0);
+
+  auto get_window_extent = [display, window] () {
+    XWindowAttributes attrs;
+    XGetWindowAttributes(display, window, &attrs);
+    return vk::Extent2D(attrs.width, attrs.height);
+  };
 
   // Initialize vulkan
   space::core::VkAppContext vk_ctx;
@@ -260,17 +138,12 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  auto get_window_extent = [display, window] () {
-    XWindowAttributes attrs;
-    XGetWindowAttributes(display, window, &attrs);
-    return vk::Extent2D(attrs.width, attrs.height);
-  };
-
   // We create the scene inside the scope
   // as we want to avoid its destruction after
   // the display is closed with XCloseDisplay().
   {
-    Scene scene(&vk_ctx, get_window_extent);
+    Camera camera;
+    Scene scene(&vk_ctx, &camera, get_window_extent);
 
     ReferenceGrid reference_grid;
     Curve curve;
@@ -282,16 +155,19 @@ int main(int argc, char *argv[]) {
     const int max_fd = std::max(x11_fd, gamepad_fd) + 1;
     struct timeval timeout;
     fd_set read_fds;
-    bool exit = false;
 
-    CameraControls camera_input = {};
+    // X11 Keyboard and mouse event utility class
+    XInput2 xinput2(display, window);
+    xinput2.Init();
 
-    if (gamepad)
-      gamepad->SetEventCallback(
-        [&camera_input](const struct EventData &data) {
-          gamepad2camera(&camera_input, data);
-        });
+    // We should substitute this with a proper
+    // Input manager class which takes care of
+    // dispatching events to the scene in case
+    // complex internal states should be ever required.
+    InterfaceManager interface_manager(display, window, &scene, &camera, &xinput2, gamepad.get());
 
+    // Get file descriptor for when the rendering is done to add
+    // to be added to select.
     auto start = std::chrono::steady_clock::now();
     for (;;) {
       FD_ZERO(&read_fds);
@@ -315,65 +191,13 @@ int main(int argc, char *argv[]) {
       if (FD_ISSET(x11_fd, &read_fds)) {
         while(XPending(display)) {
           XNextEvent(display, &event);
-          if (XGetEventData(display, cookie) &&
-              cookie->type == GenericEvent &&
-              cookie->extension == xi_opcode) {
-            switch (cookie->evtype) {
-            case XI_ButtonPress: {
-              device_data = (XIDeviceEvent *)cookie->data;
-              if (device_data->detail == Button1) {
-                GetCurrentPointerPosition(
-                  display, window, pointer_device, &last_win_x, &last_win_y);
-                mask.deviceid = pointer_device;
-                mask.mask_len = XIMaskLen(XI_LASTEVENT);
-                mask.mask = new unsigned char[mask.mask_len]();
-                XISetMask(mask.mask, XI_RawMotion);
-                XISetMask(mask.mask, XI_ButtonPress);
-                XISetMask(mask.mask, XI_ButtonRelease);
-
-                XIGrabDevice(display, pointer_device, window, CurrentTime,
-                             //InvisibleCursor(display, window),
-                             None,
-                             XIGrabModeAsync, XIGrabModeAsync, True, &mask);
-                delete mask.mask;
-              }
-              break;
-            }
-            case XI_ButtonRelease: {
-              device_data = (XIDeviceEvent *)cookie->data;
-              if (device_data->detail == Button1) {
-                //XIWarpPointer(display, pointer_device, window, window, 0, 0, 0, 0, last_win_x, last_win_y);
-                XIUngrabDevice(display, pointer_device, CurrentTime);
-              }
-              break;
-            }
-            case XI_KeyPress: {
-              device_data = (XIDeviceEvent *)cookie->data;
-              if (XkbKeycodeToKeysym(display, device_data->detail, 0, 0) == XK_Escape)
-                exit = true;
-              break;
-            }
-            case XI_RawMotion: {
-              raw_data = (XIRawEvent *)cookie->data;
-              auto values = GetRawDataValues(raw_data, NULL, NULL);
-              vk::Extent2D extent = get_window_extent();
-              int minor_axis = std::min(extent.width, extent.height) / 2;
-              const float dx = values.first / minor_axis;
-              const float dy = -values.second / minor_axis;
-              scene.InputTrackball(dx * 2, dy * 2);
-              break;
-            }
-            }
-            XFreeEventData(display, cookie);
-          }
+          xinput2.ReadEvents(event);
         }
       }
-
-      if (exit) break;
+      if (interface_manager.Exit()) break;
 
       auto delta = std::chrono::steady_clock::now() - start;
       if (std::chrono::duration_cast<std::chrono::milliseconds>(delta).count() > 16) {
-        //scene.Input(camera_input);
         scene.SubmitRendering();
         scene.Present();
       }

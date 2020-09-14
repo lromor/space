@@ -33,11 +33,10 @@
 
 #define FENCE_TIMEOUT 100000000
 
-Scene::Scene(space::core::VkAppContext *vk_ctx,  const QueryExtentCallback &fn)
+Scene::Scene(space::core::VkAppContext *vk_ctx, Camera *camera, const QueryExtentCallback &fn)
   : vk_ctx_(vk_ctx),  QueryExtent(fn), current_buffer_(0),
     draw_fence_(vk_ctx->device->createFenceUnique(vk::FenceCreateInfo())),
-    camera_{glm::vec3(0.0f, 0.0f, -15.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f)},
-    projection_matrices_({0}) {}
+    camera_(camera) {}
 
 void Scene::Init() {
   vk::UniqueDevice &device = vk_ctx_->device;
@@ -122,8 +121,8 @@ void Scene::CreateSwapChainContext() {
 
   struct SwapChainContext *swap_chain_context = new SwapChainContext{
     std::move(command_buffer), std::move(swap_chain_data), std::move(depth_buffer_data),
-      std::move(uniform_buffer_data), std::move(render_pass), std::move(framebuffers),
-      std::move(descriptor_pool), std::move(descriptor_set)};
+    std::move(uniform_buffer_data), std::move(render_pass), std::move(framebuffers),
+    std::move(descriptor_pool), std::move(descriptor_set)};
 
   swap_chain_context_.reset(swap_chain_context);
 
@@ -151,13 +150,17 @@ void Scene::SubmitRendering() {
   const vk::UniqueDescriptorSet &descriptor_set = swap_chain_context_->descriptor_set;
   const space::core::BufferData &uniform_buffer_data = swap_chain_context_->uniform_buffer_data;
 
+  vk::Extent2D extent = swap_chain_context_->swap_chain_data.extent;
+  const auto aspect_ratio =
+    static_cast<float>(extent.width) / static_cast<float>(extent.height);
+
   // Update the projection matrices with the current values of camera, model, fov, etc..
-  projection_matrices_ = UpdateProjectionMatrices();
+  auto projection_matrices = camera_->GetProjectionMatrices(aspect_ratio);
  
   // Update uniform buffer
   space::core::CopyToDevice(
-    device, uniform_buffer_data.deviceMemory,  projection_matrices_.clip
-    * projection_matrices_.projection * projection_matrices_.view * projection_matrices_.model);
+    device, uniform_buffer_data.deviceMemory,  projection_matrices.clip
+    * projection_matrices.projection * projection_matrices.view * projection_matrices.model);
 
   // Get the index of the next available swapchain image:
   vk::UniqueSemaphore imageAcquiredSemaphore = device->createSemaphoreUnique(vk::SemaphoreCreateInfo());
@@ -196,20 +199,20 @@ void Scene::SubmitRendering() {
   command_buffer->beginRenderPass(
     renderPassBeginInfo, vk::SubpassContents::eInline);
 
-   command_buffer->bindDescriptorSets(
-     vk::PipelineBindPoint::eGraphics, pipeline_layout.get(), 0, descriptor_set.get(), nullptr);
+  command_buffer->bindDescriptorSets(
+    vk::PipelineBindPoint::eGraphics, pipeline_layout.get(), 0, descriptor_set.get(), nullptr);
 
-   command_buffer->setViewport(
-     0, vk::Viewport(
-       0.0f, 0.0f,
-       static_cast<float>(swap_chain_data.extent.width),
-       static_cast<float>(swap_chain_data.extent.height), 0.0f, 1.0f));
-   command_buffer->setScissor(
-     0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent));
+  command_buffer->setViewport(
+    0, vk::Viewport(
+      0.0f, 0.0f,
+      static_cast<float>(swap_chain_data.extent.width),
+      static_cast<float>(swap_chain_data.extent.height), 0.0f, 1.0f));
+  command_buffer->setScissor(
+    0, vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent));
 
-   for (const auto entity : entities_) {
-     entity->Draw(&command_buffer);
-   }
+  for (const auto entity : entities_) {
+    entity->Draw(&command_buffer);
+  }
 
   command_buffer->endRenderPass();
   command_buffer->end();
@@ -233,81 +236,7 @@ void Scene::Present() {
       vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
     assert(result == vk::Result::eSuccess);
   } catch (vk::OutOfDateKHRError &) {
-      // Re-create the swapchain context.
+    // Re-create the swapchain context.
     CreateSwapChainContext();
   }
-}
-
-struct Scene::Projection Scene::UpdateProjectionMatrices() {
-  vk::Extent2D extent = swap_chain_context_->swap_chain_data.extent;
-
-  float fov = glm::radians(60.0f);
-  const auto aspect_ratio =
-    static_cast<float>(extent.width) / static_cast<float>(extent.height);
-
-  glm::mat4x4 model = glm::mat4x4(1.0f);
-  glm::mat4x4 view = glm::lookAt(camera_.eye, camera_.center, camera_.up);
-  glm::mat4x4 projection = glm::perspective(fov, aspect_ratio, 0.1f, 100.0f);
-  glm::mat4x4 clip =
-    glm::mat4x4(1.0f,  0.0f, 0.0f, 0.0f,
-                0.0f, -1.0f, 0.0f, 0.0f,
-                0.0f,  0.0f, 0.5f, 0.0f,
-                0.0f,  0.0f, 0.5f, 1.0f);   // vulkan clip space has inverted y and half z !
-  return Projection{ fov, model, view, projection, clip };
-}
-
-void Scene::Input(CameraControls &input) {
-  // Remember: camera center is the point the camera is looking at.
-  // camera eye is the position of the camera in 3d space.
-  const float kTranslationFactor = 0.01f;
-  const float kRotationFactor = 0.001f;
-
-  // camera basis
-  glm::vec3 nx = glm::normalize(camera_.center - camera_.eye); // front
-  glm::vec3 nz = glm::normalize(glm::cross(-nx, glm::vec3(0.0f, 1.0f, 0.0f))); // side
-  glm::vec3 ny = glm::normalize(glm::cross(nx, nz)); // up
-
-  // Translation vector (we using move in nx and nz direction)
-  auto t = input.dy * kTranslationFactor * nx + input.dx * kTranslationFactor * nz;
-
-  // Shift everything
-  camera_.center += t;
-  camera_.eye += t;
-  camera_.up = ny;
-
-  //pitch
-  //position = (Rotate(some angle, cameraRight) * (position - target)) + target;
-  auto transform = glm::rotate(glm::mat4x4(1.0f), input.dtheta * kRotationFactor, -nz);
-  camera_.eye = transform * (glm::vec4(camera_.eye - camera_.center, 1.0));
-  camera_.eye += camera_.center;
-
-  //yaw, Y-up system
-  //position = (Rotate(some other angle, (0,1,0)) * (position - target)) + target;
-  auto transform2 = glm::rotate(glm::mat4x4(1.0f), input.dphi * kRotationFactor, glm::vec3(0.0f, 1.0f, 0.0f));
-  camera_.eye = transform2 * (glm::vec4(camera_.eye - camera_.center, 1.0));
-  camera_.eye += camera_.center;
-
-
-  // Creates an identity quaternion (no rotation)
-  //glm::quat q = glm::quat(cos(1e-3), 0.0f, sin(1e-3), 0.0f);
-  //auto m = glm::toMat4(q);
-  //camera_.eye = m * glm::vec4(camera_.eye, 1.0f);
-}
-
-void Scene::InputTrackball(float dx, float dy) {
-  glm::vec3 neye = glm::normalize(camera_.eye - camera_.center);
-  glm::vec3 nup = glm::normalize(camera_.up);
-  glm::vec3 nside = glm::normalize(glm::cross(nup, neye));
-
-  glm::vec3 new_up = nup * dy;
-  glm::vec3 new_side = nside * dx;
-
-  glm::vec3 new_direction = new_up + new_side;
-  glm::vec3 new_rot = glm::normalize(glm::cross(new_direction, camera_.eye - camera_.center));
-  float angle = sqrt(dx * dx + dy * dy);
-  glm::angleAxis(angle, new_rot);
-
-  glm::mat4x4 transform = glm::toMat4(glm::angleAxis(angle, new_rot));
-  camera_.eye = transform * glm::vec4(camera_.eye, 1.0f);
-  camera_.up = transform * glm::vec4(camera_.up, 1.0f);
 }

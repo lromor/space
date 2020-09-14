@@ -18,41 +18,23 @@
 
 #include <iostream>
 #include <vulkan/vulkan.hpp>
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/string_cast.hpp>
 
 #include "vulkan-core.h"
 #include "entity.h"
-#include "gamepad.h"
-
-struct CameraControls {
-  CameraControls() = default;
-  CameraControls operator+(const CameraControls &b) const {
-    return CameraControls{
-      dx + b.dx, dy + b.dy, dz + b.dz,
-        dphi + b.dphi, dtheta + b.dtheta};
-  }
-  float dx, dy, dz;
-  float dphi, dtheta;
-};
+#include "input/gamepad.h"
+#include "camera.h"
 
 // Given an initialized vulkan context
 // perform rendering of the entities.
 class Scene {
 public:
-
   typedef std::function<vk::Extent2D()> QueryExtentCallback;
-
-  Scene(space::core::VkAppContext *context, const QueryExtentCallback &fn);
+  Scene(space::core::VkAppContext *context, Camera *camera, const QueryExtentCallback &fn);
 
   void Init();
   void AddEntity(space::Entity *entity);
-  void Input(CameraControls &input);
   void SubmitRendering();
   void Present();
-  void InputTrackball(float dx, float dy);
 
 private:
   space::core::VkAppContext *const vk_ctx_;
@@ -101,27 +83,8 @@ private:
   // and we are ready to present :)
   vk::UniqueFence draw_fence_;
 
-  struct Camera {
-    glm::vec3 eye; // Camera position.
-    glm::vec3 center; // Looking point.
-    glm::vec3 up; // Camera vertical axis.
-  };
-
-  struct Camera camera_;
-
-  struct Projection {
-    float fov;
-    glm::mat4x4 model;
-    glm::mat4x4 view;
-    glm::mat4x4 projection;
-    glm::mat4x4 clip;
-  };
-
-  struct Projection projection_matrices_;
-  struct Projection UpdateProjectionMatrices();
-
-
   std::vector<space::Entity *> entities_;
+  Camera *camera_;
 };
 
 #endif // __SIMPLE_SCENE_H_
