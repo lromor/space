@@ -169,6 +169,7 @@ void Curve::Register(
     .AddVertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, 0)
     .EnableDynamicState(vk::DynamicState::eScissor)
     .EnableDynamicState(vk::DynamicState::eViewport)
+    .EnableDynamicState(vk::DynamicState::eLineWidth)
     .Create(pipeline_cache);
 
   unsigned nsteps = 1000;
@@ -207,6 +208,7 @@ void Curve::Draw(const vk::UniqueCommandBuffer *command_buffer) {
 
   // Tell vulkan which buffer contains the vertices we want to draw.
   cb->bindVertexBuffers(0, *vertex_buffer_data_->buffer, {0});
+  cb->setLineWidth(1.0);
   cb->draw(points_.size(), 1, 0, 0);
 }
 

@@ -186,7 +186,7 @@ void Scene::SubmitRendering() {
 
   vk::ClearValue clear_values[2];
   clear_values[0].color =
-    vk::ClearColorValue(std::array<float, 4>({ 0.2f, 0.2f, 0.2f, 0.2f }));
+    vk::ClearColorValue(std::array<float, 4>({ 0.9f, 0.9f, 0.9f, 1.0f }));
   clear_values[1].depthStencil =
     vk::ClearDepthStencilValue(1.0f, 0);
   vk::RenderPassBeginInfo renderPassBeginInfo(
@@ -229,8 +229,9 @@ void Scene::Present() {
          == device->waitForFences(draw_fence_.get(), VK_TRUE, FENCE_TIMEOUT)) { usleep(1000); }
 
   try {
-    present_queue.presentKHR(
+    auto result = present_queue.presentKHR(
       vk::PresentInfoKHR(0, nullptr, 1, &swap_chain_data.swap_chain.get(), &current_buffer_));
+    assert(result == vk::Result::eSuccess);
   } catch (vk::OutOfDateKHRError &) {
       // Re-create the swapchain context.
     CreateSwapChainContext();

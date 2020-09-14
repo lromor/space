@@ -170,7 +170,7 @@ vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache
 
   auto &device = *device_;
   return device->createGraphicsPipelineUnique(
-    pipeline_cache->get(), graphics_pipeline_create_info);
+    pipeline_cache->get(), graphics_pipeline_create_info).value;
 }
 
 // PIMPL forwards.

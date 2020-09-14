@@ -6,23 +6,25 @@ layout(location = 0) in vec2 uv;
 
 layout(location = 0) out vec4 outColor;
 
-
 void main(void) {
-    float divisions = 10.0;
-    float thickness = 0.005;
-    float delta = 0.05 / 2.0;
+  float divisions = 50.0;
+  float thickness = 0.04;
+  float delta = 0.05 / 2.0;
 
-    float x = fract(uv.x / (1.0 / divisions));
-    float xdelta = fwidth(x) * 2.5;
-    x = smoothstep(x - xdelta, x + xdelta, thickness);
+  float x = fract(uv.x * divisions);
+  x = min(x, 1.0 - x);
 
-    float y = fract(uv.y / (1.0 / divisions));
-    float ydelta = fwidth(y) * 2.5;
-    y = smoothstep(y - ydelta, y + ydelta, thickness);
+  float xdelta = fwidth(x);
+  x = smoothstep(x - xdelta, x + xdelta, thickness);
 
-    float c = clamp(x + y, 0.0, 1.0);
+  float y = fract(uv.y * divisions);
+  y = min(y, 1.0 - y);
 
-    // Transparent if c near black.
-    if (c < 0.1) discard;
-    outColor = vec4(c, c, c, 1.0);
+  float ydelta = fwidth(y);
+  y = smoothstep(y - ydelta, y + ydelta, thickness);
+
+  float c =clamp(x + y, 0.0, 1.0);
+
+  if (c < 0.3) discard;
+  outColor = vec4(0.8, 0.8, 0.8, 1.0);
 }
