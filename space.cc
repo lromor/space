@@ -115,6 +115,10 @@ int main(int argc, char *argv[]) {
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
   XEvent event;
 
+  // X11 Keyboard and mouse event utility class
+  XInput2 xinput2(display, window);
+  xinput2.Init();
+
   XSelectInput(display, window, ExposureMask);
   XMapWindow(display, window);
   XSync(display, False);
@@ -155,10 +159,6 @@ int main(int argc, char *argv[]) {
     const int max_fd = std::max(x11_fd, gamepad_fd) + 1;
     struct timeval timeout;
     fd_set read_fds;
-
-    // X11 Keyboard and mouse event utility class
-    XInput2 xinput2(display, window);
-    xinput2.Init();
 
     // We should substitute this with a proper
     // Input manager class which takes care of

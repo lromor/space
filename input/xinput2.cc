@@ -123,7 +123,7 @@ void XInput2::ReadEvents(XEvent event) {
       device_data = (XIDeviceEvent *)cookie->data;
       const unsigned int button = device_data->detail;
       if (button == Button4 || button == Button5 ) {
-        const float value = (button == Button4) ? 1.0f : -1.0f;
+        const float value = (button == Button4) ? -1.0f : 1.0f;
         for (const auto &c : on_wheel_event_)
           c(this, value);
         break;
