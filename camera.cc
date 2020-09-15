@@ -49,9 +49,14 @@ void Camera::TrackballControlZoom(float zoom) {
   const glm::vec3 eyecenter = camera_vectors_.eye - camera_vectors_.center;
   const glm::vec3 neye = glm::normalize(eyecenter);
   const float length = glm::l2Norm(eyecenter);
-  const float logstep = log(length + 1) * zoom / 2.0f;
-  if (logstep + length < 1e-3f)
-    return;
+  float logstep = log(length + 1) * zoom / 2.0f;
+
+  // Shift also the center.
+  if (logstep + length < 1e-3f) {
+    logstep = 0.1f * zoom;
+    camera_vectors_.center += neye * logstep;
+  }
+
   camera_vectors_.eye += neye * logstep;
 }
 
