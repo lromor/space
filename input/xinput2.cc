@@ -86,6 +86,7 @@ bool XInput2::Init() {
   XISetMask(mask.mask, XI_KeyRelease);
 
   XISelectEvents(display_, window_, &mask, 1);
+  XSync(display_, False);
 
   delete mask.mask;
   return true;
