@@ -60,6 +60,7 @@ private:
   space::core::VkAppContext *vk_ctx_;
 
   std::unique_ptr<space::core::BufferData> vertex_buffer_data_;
+  std::unique_ptr<space::core::BufferData> index_buffer_data_;
 };
 
 #endif // __CURVE_H_

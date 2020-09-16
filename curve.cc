@@ -12,6 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
+#include <bits/stdint-uintn.h>
+#include <memory>
 #include <numeric>
 #include <cmath>
 #include <set>
@@ -197,6 +199,20 @@ void Curve::Register(
   // Submit them to the device
   space::core::CopyToDevice(
     context->device, vertex_buffer_data_->deviceMemory, points_.data(), points_.size());
+
+  // Build the index buffer
+  std::vector<uint16_t> indexes((points_.size() - 1) * 2);
+  for (size_t i = 0; i < indexes.size(); ++i) {
+    indexes[i] = i / 2 + i % 2;
+  }
+  index_buffer_data_ = std::make_unique<space::core::BufferData>(
+    space::core::BufferData(
+      context->physical_device, context->device, indexes.size() * sizeof(uint16_t),
+      vk::BufferUsageFlagBits::eIndexBuffer));
+
+  // Submit them to the device
+  space::core::CopyToDevice(
+    context->device, index_buffer_data_->deviceMemory, indexes.data(), indexes.size());
 }
 
 void Curve::Draw(const vk::UniqueCommandBuffer *command_buffer) {
@@ -208,7 +224,8 @@ void Curve::Draw(const vk::UniqueCommandBuffer *command_buffer) {
 
   // Tell vulkan which buffer contains the vertices we want to draw.
   cb->bindVertexBuffers(0, *vertex_buffer_data_->buffer, {0});
-  cb->setLineWidth(1.0);
-  cb->draw(points_.size(), 1, 0, 0);
-}
+  cb->bindIndexBuffer(*index_buffer_data_->buffer, 0, vk::IndexType::eUint16);
+  cb->setLineWidth(2.0);
 
+  cb->drawIndexed((points_.size() - 1) * 2, 1, 0, 0, 0);
+}
