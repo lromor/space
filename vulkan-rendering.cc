@@ -20,6 +20,7 @@
 
 #include <numeric>
 #include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_core.h>
 
 #include "vulkan-core.h"
 
@@ -235,11 +236,12 @@ namespace space {
       vk::PhysicalDevice const& physical_device, vk::UniqueDevice const& device,
       vk::Format format, vk::Extent2D const& extent, vk::ImageTiling tiling,
       vk::ImageUsageFlags usage, vk::ImageLayout initial_layout,
-      vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask)
+      vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask,
+      vk::SampleCountFlagBits nsamples)
       : format(format) {
       vk::ImageCreateInfo image_create_info(
         vk::ImageCreateFlags(), vk::ImageType::e2D, format, vk::Extent3D(extent, 1), 1, 1,
-        vk::SampleCountFlagBits::e1, tiling, usage | vk::ImageUsageFlagBits::eSampled,
+        nsamples, tiling, usage,
         vk::SharingMode::eExclusive, 0, nullptr, initial_layout);
       image = device->createImageUnique(image_create_info);
       device_memory = AllocateMemory(
@@ -336,17 +338,19 @@ namespace space {
     std::vector<vk::UniqueFramebuffer> CreateFramebuffers(
       vk::UniqueDevice &device, vk::UniqueRenderPass &renderPass,
       std::vector<vk::UniqueImageView> const& imageViews,
-      vk::UniqueImageView const& depthImageView, vk::Extent2D const& extent) {
-      vk::ImageView attachments[2];
-      attachments[1] = depthImageView.get();
+      vk::UniqueImageView const& depthImageView,
+      vk::UniqueImageView const& colorImageView, vk::Extent2D const& extent) {
+      vk::ImageView attachments[3];
+      attachments[0] = *colorImageView;
+      attachments[2] = *depthImageView;
 
-      vk::FramebufferCreateInfo framebufferCreateInfo(
-        vk::FramebufferCreateFlags(), *renderPass, depthImageView ? 2
-        : 1, attachments, extent.width, extent.height, 1);
       std::vector<vk::UniqueFramebuffer> framebuffers;
       framebuffers.reserve(imageViews.size());
       for (auto const& view : imageViews) {
-        attachments[0] = view.get();
+        attachments[1] = *view;
+        vk::FramebufferCreateInfo framebufferCreateInfo(
+          vk::FramebufferCreateFlags(), *renderPass, 3,
+          attachments, extent.width, extent.height, 1);
         framebuffers.push_back(device->createFramebufferUnique(framebufferCreateInfo));
       }
       return framebuffers;
@@ -391,35 +395,58 @@ namespace space {
 
     vk::UniqueRenderPass CreateRenderPass(
       vk::UniqueDevice &device, vk::Format colorFormat, vk::Format depthFormat,
-      vk::AttachmentLoadOp loadOp, vk::ImageLayout colorFinalLayout) {
+      vk::AttachmentLoadOp loadOp, vk::ImageLayout colorFinalLayout,
+      vk::SampleCountFlagBits nsamples) {
       std::vector<vk::AttachmentDescription> attachmentDescriptions;
       assert(colorFormat != vk::Format::eUndefined);
       attachmentDescriptions.push_back(
         vk::AttachmentDescription(
           vk::AttachmentDescriptionFlags(),
-          colorFormat, vk::SampleCountFlagBits::e1, loadOp,
+          colorFormat, nsamples,
+          loadOp,
+          vk::AttachmentStoreOp::eDontCare,
+          vk::AttachmentLoadOp::eDontCare,
+          vk::AttachmentStoreOp::eDontCare,
+          vk::ImageLayout::eUndefined,
+          vk::ImageLayout::eColorAttachmentOptimal));
+
+      // Resolve attachment
+      attachmentDescriptions.push_back(
+        vk::AttachmentDescription(
+          vk::AttachmentDescriptionFlags(),
+          colorFormat, vk::SampleCountFlagBits::e1,
+          vk::AttachmentLoadOp::eDontCare,
           vk::AttachmentStoreOp::eStore,
           vk::AttachmentLoadOp::eDontCare,
           vk::AttachmentStoreOp::eDontCare,
-          vk::ImageLayout::eUndefined, colorFinalLayout));
+          vk::ImageLayout::eUndefined,
+          colorFinalLayout));
 
       if (depthFormat != vk::Format::eUndefined) {
         attachmentDescriptions.push_back(
           vk::AttachmentDescription(
-            vk::AttachmentDescriptionFlags(), depthFormat, vk::SampleCountFlagBits::e1,
-            loadOp, vk::AttachmentStoreOp::eDontCare,
-            vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+            vk::AttachmentDescriptionFlags(), depthFormat, nsamples,
+            loadOp,
+            vk::AttachmentStoreOp::eDontCare,
+            vk::AttachmentLoadOp::eDontCare,
+            vk::AttachmentStoreOp::eDontCare,
             vk::ImageLayout::eUndefined,
             vk::ImageLayout::eDepthStencilAttachmentOptimal));
       }
+
       vk::AttachmentReference colorAttachment(
         0, vk::ImageLayout::eColorAttachmentOptimal);
+      vk::AttachmentReference colorResolveAttachment(
+        1, vk::ImageLayout::eColorAttachmentOptimal);
       vk::AttachmentReference depthAttachment(
-        1, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+        2, vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
       vk::SubpassDescription subpassDescription(
-        vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, 0,
-        nullptr, 1, &colorAttachment, nullptr,
+        vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics,
+        0, nullptr,
+        1, &colorAttachment, &colorResolveAttachment,
         (depthFormat != vk::Format::eUndefined) ? &depthAttachment : nullptr);
+
       return device->createRenderPassUnique(
         vk::RenderPassCreateInfo(
           vk::RenderPassCreateFlags(), static_cast<uint32_t>(attachmentDescriptions.size()),

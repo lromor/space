@@ -57,6 +57,9 @@ private:
     vk::UniqueCommandBuffer command_buffer;
     space::core::SwapChainData swap_chain_data;
 
+    // For multisampling
+    space::core::ImageData color_buffer_data;
+
     // Depth buffer data. Contains the resulting
     // depth pseudoimage.
     space::core::DepthBufferData depth_buffer_data;

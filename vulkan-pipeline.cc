@@ -1,6 +1,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <set>
+#include <vulkan/vulkan.hpp>
 
 #include "vulkan-core.h"
 
@@ -28,7 +29,7 @@ public:
 
   void EnableDynamicState(const vk::DynamicState &state);
 
-  vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache);
+  vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache, vk::SampleCountFlagBits nsamples);
 private:
   const vk::UniqueDevice *device_;
   const vk::UniquePipelineLayout *pipeline_layout_;
@@ -105,7 +106,8 @@ void GraphicsPipelineBuilder::Impl::EnableDynamicState(const vk::DynamicState &s
   dynamic_states_.insert(state);
 }
 
-vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache *pipeline_cache) {
+vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache *pipeline_cache,
+                                                         vk::SampleCountFlagBits nsamples) {
   // Shaders
   std::vector<vk::PipelineShaderStageCreateInfo> stages;
   for (const auto &value : stages_) {
@@ -128,8 +130,7 @@ vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache
   vk::PipelineViewportStateCreateInfo viewport_state(
     vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
 
-  vk::PipelineMultisampleStateCreateInfo multisample_state(
-    {}, vk::SampleCountFlagBits::e1);
+  vk::PipelineMultisampleStateCreateInfo multisample_state({}, nsamples);
 
   vk::StencilOpState stencil_op_state(
     vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
@@ -217,8 +218,8 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::EnableDynamicState(
 }
 
 vk::UniquePipeline GraphicsPipelineBuilder::Create(
-  vk::UniquePipelineCache *pipeline_cache) {
-  return impl_->Create(pipeline_cache);
+  vk::UniquePipelineCache *pipeline_cache, vk::SampleCountFlagBits nsamples) {
+  return impl_->Create(pipeline_cache, nsamples);
 }
 
 GraphicsPipelineBuilder::GraphicsPipelineBuilder(

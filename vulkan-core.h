@@ -135,7 +135,8 @@ namespace space {
       ImageData(vk::PhysicalDevice const& physical_device, vk::UniqueDevice const& device,
                 vk::Format format, vk::Extent2D const& extent, vk::ImageTiling tiling,
                 vk::ImageUsageFlags usage, vk::ImageLayout initial_layout,
-                vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask);
+                vk::MemoryPropertyFlags memory_properties, vk::ImageAspectFlags aspect_mask,
+                vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e1);
       vk::Format format;
       vk::UniqueImage image;
       vk::UniqueDeviceMemory device_memory;
@@ -145,11 +146,14 @@ namespace space {
     struct DepthBufferData : public ImageData {
       DepthBufferData(
         vk::PhysicalDevice &physical_device, vk::UniqueDevice & device,
-        vk::Format format, vk::Extent2D const& extent)
+        vk::Format format, vk::Extent2D const& extent,
+        vk::ImageUsageFlagBits usage,
+        vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e1)
         : ImageData(
           physical_device, device, format, extent, vk::ImageTiling::eOptimal,
-          vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageLayout::eUndefined,
-          vk::MemoryPropertyFlagBits::eDeviceLocal, vk::ImageAspectFlagBits::eDepth) {}
+          usage | vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::ImageLayout::eUndefined,
+          vk::MemoryPropertyFlagBits::eDeviceLocal, vk::ImageAspectFlagBits::eDepth,
+          nsamples) {}
     };
 
     vk::UniqueCommandPool CreateCommandPool(vk::UniqueDevice &device, uint32_t queue_family_index);
@@ -228,7 +232,9 @@ namespace space {
     std::vector<vk::UniqueFramebuffer> CreateFramebuffers(
       vk::UniqueDevice &device, vk::UniqueRenderPass &renderPass,
       std::vector<vk::UniqueImageView> const& imageViews,
-      vk::UniqueImageView const& depthImageView, vk::Extent2D const& extent);
+      vk::UniqueImageView const& depthImageView,
+      vk::UniqueImageView const& colorImageView,
+      vk::Extent2D const& extent);
 
     std::optional<vk::SurfaceFormatKHR> PickSurfaceFormat(
       std::vector<vk::SurfaceFormatKHR> const& formats);
@@ -236,7 +242,8 @@ namespace space {
     vk::UniqueRenderPass CreateRenderPass(
       vk::UniqueDevice &device, vk::Format colorFormat, vk::Format depthFormat,
       vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eClear,
-      vk::ImageLayout colorFinalLayout = vk::ImageLayout::ePresentSrcKHR);
+      vk::ImageLayout colorFinalLayout = vk::ImageLayout::ePresentSrcKHR,
+      vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e1);
 
     // Simplify the creation of the graphics pipeline.
     class GraphicsPipelineBuilder {
@@ -268,7 +275,8 @@ namespace space {
       GraphicsPipelineBuilder& EnableDynamicState(const vk::DynamicState &state);
 
       // Consume the builder and construct the pipeline
-      vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr);
+      vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr,
+                                vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e8);
 
       ~GraphicsPipelineBuilder();
  
@@ -276,6 +284,8 @@ namespace space {
       class Impl;
       std::unique_ptr<Impl> impl_;
     };
+
+    vk::SampleCountFlagBits GetMaxUsableSampleCount(vk::PhysicalDevice const& physical_device);
   }
 }
 
