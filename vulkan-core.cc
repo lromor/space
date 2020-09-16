@@ -349,5 +349,20 @@ namespace space {
         graphics_and_present_queue_family_index.first,
         graphics_and_present_queue_family_index.second};
     }
+
+    vk::SampleCountFlagBits GetMaxUsableSampleCount(const vk::PhysicalDevice &physical_device) {
+      vk::PhysicalDeviceProperties properties = physical_device.getProperties();
+      vk::SampleCountFlags counts =
+        properties.limits.framebufferColorSampleCounts
+        & properties.limits.framebufferDepthSampleCounts;
+
+      if (counts & vk::SampleCountFlagBits::e64) return vk::SampleCountFlagBits::e64;
+      if (counts & vk::SampleCountFlagBits::e32) return vk::SampleCountFlagBits::e64;
+      if (counts & vk::SampleCountFlagBits::e16) return vk::SampleCountFlagBits::e64;
+      if (counts & vk::SampleCountFlagBits::e8) return vk::SampleCountFlagBits::e64;
+      if (counts & vk::SampleCountFlagBits::e4) return vk::SampleCountFlagBits::e64;
+      if (counts & vk::SampleCountFlagBits::e2) return vk::SampleCountFlagBits::e64;
+      return vk::SampleCountFlagBits::e1;
+    }
   }
 }

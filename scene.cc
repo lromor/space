@@ -90,23 +90,35 @@ void Scene::CreateSwapChainContext() {
     swap_chain_context_ ? std::move(swap_chain_context_->swap_chain_data.swap_chain) : vk::UniqueSwapchainKHR(),
     graphics_queue_family_index, present_queue_family_index);
 
-  space::core::DepthBufferData depth_buffer_data(
-    physical_device, device, vk::Format::eD16Unorm, swap_chain_data.extent);
+  vk::SampleCountFlagBits msaa = vk::SampleCountFlagBits::e8;
 
-  space::core::BufferData uniform_buffer_data(
-    physical_device, device, sizeof(glm::mat4x4),
-    vk::BufferUsageFlagBits::eUniformBuffer);
+  space::core::ImageData color_buffer_data(
+    physical_device, device, swap_chain_data.color_format, extent, vk::ImageTiling::eOptimal,
+    vk::ImageUsageFlagBits::eTransientAttachment
+    | vk::ImageUsageFlagBits::eColorAttachment,
+    vk::ImageLayout::eUndefined,
+    vk::MemoryPropertyFlagBits::eDeviceLocal,
+    vk::ImageAspectFlagBits::eColor,
+    msaa);
+
+  space::core::DepthBufferData depth_buffer_data(
+    physical_device, device, vk::Format::eD16Unorm,
+    swap_chain_data.extent, vk::ImageUsageFlagBits::eTransientAttachment, msaa);
 
   vk::UniqueRenderPass render_pass =
     space::core::CreateRenderPass(
-      device, space::core::PickSurfaceFormat(
-        physical_device.getSurfaceFormatsKHR(
-          *surface))->format, depth_buffer_data.format);
+      device, swap_chain_data.color_format, depth_buffer_data.format,
+      vk::AttachmentLoadOp::eClear, vk::ImageLayout::ePresentSrcKHR,
+      msaa);
 
   std::vector<vk::UniqueFramebuffer> framebuffers =
     space::core::CreateFramebuffers(
       device, render_pass, swap_chain_data.image_views,
-      depth_buffer_data.image_view, swap_chain_data.extent);
+      depth_buffer_data.image_view, color_buffer_data.image_view, swap_chain_data.extent);
+
+  space::core::BufferData uniform_buffer_data(
+    physical_device, device, sizeof(glm::mat4x4),
+    vk::BufferUsageFlagBits::eUniformBuffer);
 
   vk::UniqueDescriptorPool descriptor_pool =
     space::core::CreateDescriptorPool(device, { {vk::DescriptorType::eUniformBuffer, 1} });
@@ -120,8 +132,9 @@ void Scene::CreateSwapChainContext() {
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
 
   struct SwapChainContext *swap_chain_context = new SwapChainContext{
-    std::move(command_buffer), std::move(swap_chain_data), std::move(depth_buffer_data),
-    std::move(uniform_buffer_data), std::move(render_pass), std::move(framebuffers),
+    std::move(command_buffer), std::move(swap_chain_data), std::move(color_buffer_data),
+    std::move(depth_buffer_data), std::move(uniform_buffer_data),
+    std::move(render_pass), std::move(framebuffers),
     std::move(descriptor_pool), std::move(descriptor_set)};
 
   swap_chain_context_.reset(swap_chain_context);
@@ -187,14 +200,16 @@ void Scene::SubmitRendering() {
 
   command_buffer->begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlags()));
 
-  vk::ClearValue clear_values[2];
+  vk::ClearValue clear_values[3];
   clear_values[0].color =
     vk::ClearColorValue(std::array<float, 4>({ 0.9f, 0.9f, 0.9f, 1.0f }));
-  clear_values[1].depthStencil =
+  clear_values[1].color =
+    vk::ClearColorValue(std::array<float, 4>({ 0.9f, 0.9f, 0.9f, 1.0f }));
+  clear_values[2].depthStencil =
     vk::ClearDepthStencilValue(1.0f, 0);
   vk::RenderPassBeginInfo renderPassBeginInfo(
     render_pass.get(), framebuffers[current_buffer_].get(),
-    vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent), 2, clear_values);
+    vk::Rect2D(vk::Offset2D(0, 0), swap_chain_data.extent), 3, clear_values);
 
   command_buffer->beginRenderPass(
     renderPassBeginInfo, vk::SubpassContents::eInline);
