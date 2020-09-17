@@ -57,6 +57,8 @@ private:
     vk::UniqueCommandBuffer command_buffer;
     space::core::SwapChainData swap_chain_data;
 
+    vk::SampleCountFlagBits max_sampling;
+
     // For multisampling
     space::core::ImageData color_buffer_data;
 

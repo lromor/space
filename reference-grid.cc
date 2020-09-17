@@ -22,6 +22,7 @@ void ReferenceGrid::Register(
     space::core::VkAppContext *context,
     vk::UniquePipelineLayout *pipeline_layout,
     vk::UniqueRenderPass *render_pass,
+    vk::SampleCountFlagBits nsamples,
     vk::UniquePipelineCache *pipeline_cache) {
 
 
@@ -37,7 +38,8 @@ void ReferenceGrid::Register(
         vk::ShaderModuleCreateFlags(), sizeof(grid_frag), grid_frag));
 
 
-  pipeline_ = space::core::GraphicsPipelineBuilder(&context->device, pipeline_layout, render_pass)
+  pipeline_ = space::core::GraphicsPipelineBuilder(
+    &context->device, pipeline_layout, render_pass, nsamples)
     .DepthBuffered(true)
     .SetPrimitiveTopology(vk::PrimitiveTopology::eTriangleList)
     .SetPolygoneMode(vk::PolygonMode::eFill)
@@ -46,7 +48,6 @@ void ReferenceGrid::Register(
     .EnableDynamicState(vk::DynamicState::eScissor)
     .EnableDynamicState(vk::DynamicState::eViewport)
     .Create(pipeline_cache);
-
 }
 
 void ReferenceGrid::Draw(const vk::UniqueCommandBuffer *command_buffer) {

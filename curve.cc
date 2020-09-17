@@ -146,6 +146,7 @@ void Curve::Register(
     space::core::VkAppContext *context,
     vk::UniquePipelineLayout *pipeline_layout,
     vk::UniqueRenderPass *render_pass,
+    vk::SampleCountFlagBits nsamples,
     vk::UniquePipelineCache *pipeline_cache) {
 
   points_.clear();
@@ -161,7 +162,8 @@ void Curve::Register(
       vk::ShaderModuleCreateInfo(
         vk::ShaderModuleCreateFlags(), sizeof(curve_frag), curve_frag));
 
-  pipeline_ = space::core::GraphicsPipelineBuilder(&context->device, pipeline_layout, render_pass)
+  pipeline_ = space::core::GraphicsPipelineBuilder(
+    &context->device, pipeline_layout, render_pass, nsamples)
     .DepthBuffered(true)
     .SetPrimitiveTopology(vk::PrimitiveTopology::eLineList)
     .SetPolygoneMode(vk::PolygonMode::eLine)

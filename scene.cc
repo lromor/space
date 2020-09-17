@@ -90,7 +90,7 @@ void Scene::CreateSwapChainContext() {
     swap_chain_context_ ? std::move(swap_chain_context_->swap_chain_data.swap_chain) : vk::UniqueSwapchainKHR(),
     graphics_queue_family_index, present_queue_family_index);
 
-  vk::SampleCountFlagBits msaa = vk::SampleCountFlagBits::e8;
+  vk::SampleCountFlagBits msaa = space::core::GetMaxUsableSampleCount(physical_device);
 
   space::core::ImageData color_buffer_data(
     physical_device, device, swap_chain_data.color_format, extent, vk::ImageTiling::eOptimal,
@@ -132,7 +132,7 @@ void Scene::CreateSwapChainContext() {
     {{vk::DescriptorType::eUniformBuffer, uniform_buffer_data.buffer, vk::UniqueBufferView()}});
 
   struct SwapChainContext *swap_chain_context = new SwapChainContext{
-    std::move(command_buffer), std::move(swap_chain_data), std::move(color_buffer_data),
+    std::move(command_buffer), std::move(swap_chain_data), msaa, std::move(color_buffer_data),
     std::move(depth_buffer_data), std::move(uniform_buffer_data),
     std::move(render_pass), std::move(framebuffers),
     std::move(descriptor_pool), std::move(descriptor_set)};
@@ -141,14 +141,14 @@ void Scene::CreateSwapChainContext() {
 
   for (const auto entity : entities_) {
     entity->Register(vk_ctx_, &pipeline_layout_, &swap_chain_context_->render_pass,
-                     &pipeline_cache_);
+                     swap_chain_context_->max_sampling, &pipeline_cache_);
   }
 }
 
 void Scene::AddEntity(space::Entity *entity) {
   // Initialize entity
   entity->Register(vk_ctx_, &pipeline_layout_, &swap_chain_context_->render_pass,
-                   &pipeline_cache_);
+                   swap_chain_context_->max_sampling, &pipeline_cache_);
   entities_.push_back(entity);
 }
 

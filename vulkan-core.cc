@@ -351,10 +351,10 @@ namespace space {
     }
 
     vk::SampleCountFlagBits GetMaxUsableSampleCount(const vk::PhysicalDevice &physical_device) {
+      return vk::SampleCountFlagBits::e4;
       vk::PhysicalDeviceProperties properties = physical_device.getProperties();
-      vk::SampleCountFlags counts =
-        properties.limits.framebufferColorSampleCounts
-        & properties.limits.framebufferDepthSampleCounts;
+      vk::SampleCountFlags counts = std::min(
+        properties.limits.framebufferColorSampleCounts, properties.limits.framebufferDepthSampleCounts);
 
       if (counts & vk::SampleCountFlagBits::e64) return vk::SampleCountFlagBits::e64;
       if (counts & vk::SampleCountFlagBits::e32) return vk::SampleCountFlagBits::e64;

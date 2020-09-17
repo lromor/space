@@ -27,6 +27,7 @@ public:
     space::core::VkAppContext *context,
     vk::UniquePipelineLayout *pipeline_layout,
     vk::UniqueRenderPass *render_pass,
+    vk::SampleCountFlagBits nsamples,
     vk::UniquePipelineCache *pipeline_cache) final;
   virtual ~ReferenceGrid() {}
 

@@ -12,7 +12,8 @@ public:
   Impl(
     const vk::UniqueDevice *device,
     const vk::UniquePipelineLayout *pipeline_layout,
-    const vk::UniqueRenderPass *render_pass);
+    const vk::UniqueRenderPass *render_pass,
+    vk::SampleCountFlagBits nsamples);
 
   void SetPrimitiveTopology(vk::PrimitiveTopology topology);
   void SetPolygonMode(vk::PolygonMode mode);
@@ -29,11 +30,12 @@ public:
 
   void EnableDynamicState(const vk::DynamicState &state);
 
-  vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache, vk::SampleCountFlagBits nsamples);
+  vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache);
 private:
   const vk::UniqueDevice *device_;
   const vk::UniquePipelineLayout *pipeline_layout_;
   const vk::UniqueRenderPass *render_pass_;
+  vk::SampleCountFlagBits nsamples_;
 
   // Depth buffered?
   bool depth_buffered_;
@@ -55,9 +57,10 @@ private:
 GraphicsPipelineBuilder::Impl::Impl(
   const vk::UniqueDevice *device,
   const vk::UniquePipelineLayout *pipeline_layout,
-  const vk::UniqueRenderPass *render_pass)
+  const vk::UniqueRenderPass *render_pass,
+  vk::SampleCountFlagBits nsamples)
   : device_(device), pipeline_layout_(pipeline_layout),
-    render_pass_(render_pass),
+    render_pass_(render_pass), nsamples_(nsamples),
     depth_buffered_(false),
     input_assembly_state_(
       vk::PipelineInputAssemblyStateCreateFlags(),
@@ -106,8 +109,7 @@ void GraphicsPipelineBuilder::Impl::EnableDynamicState(const vk::DynamicState &s
   dynamic_states_.insert(state);
 }
 
-vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache *pipeline_cache,
-                                                         vk::SampleCountFlagBits nsamples) {
+vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache *pipeline_cache) {
   // Shaders
   std::vector<vk::PipelineShaderStageCreateInfo> stages;
   for (const auto &value : stages_) {
@@ -130,7 +132,7 @@ vk::UniquePipeline GraphicsPipelineBuilder::Impl::Create(vk::UniquePipelineCache
   vk::PipelineViewportStateCreateInfo viewport_state(
     vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
 
-  vk::PipelineMultisampleStateCreateInfo multisample_state({}, nsamples);
+  vk::PipelineMultisampleStateCreateInfo multisample_state({}, nsamples_);
 
   vk::StencilOpState stencil_op_state(
     vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep,
@@ -218,14 +220,15 @@ GraphicsPipelineBuilder& GraphicsPipelineBuilder::EnableDynamicState(
 }
 
 vk::UniquePipeline GraphicsPipelineBuilder::Create(
-  vk::UniquePipelineCache *pipeline_cache, vk::SampleCountFlagBits nsamples) {
-  return impl_->Create(pipeline_cache, nsamples);
+  vk::UniquePipelineCache *pipeline_cache) {
+  return impl_->Create(pipeline_cache);
 }
 
 GraphicsPipelineBuilder::GraphicsPipelineBuilder(
   const vk::UniqueDevice *device,
   const vk::UniquePipelineLayout *pipeline_layout,
-  const vk::UniqueRenderPass *render_pass)
-  : impl_(new Impl(device, pipeline_layout, render_pass)) {}
+  const vk::UniqueRenderPass *render_pass,
+  vk::SampleCountFlagBits nsamples)
+  : impl_(new Impl(device, pipeline_layout, render_pass, nsamples)) {}
 
 GraphicsPipelineBuilder::~GraphicsPipelineBuilder() = default;

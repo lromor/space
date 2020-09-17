@@ -250,7 +250,8 @@ namespace space {
     public:
       GraphicsPipelineBuilder(const vk::UniqueDevice *device,
                               const vk::UniquePipelineLayout *pipeline_layout,
-                              const vk::UniqueRenderPass *render_pass);
+                              const vk::UniqueRenderPass *render_pass,
+                              vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e1);
 
       GraphicsPipelineBuilder& SetPrimitiveTopology(vk::PrimitiveTopology topology);
       GraphicsPipelineBuilder& SetPolygoneMode(vk::PolygonMode mode);
@@ -275,8 +276,7 @@ namespace space {
       GraphicsPipelineBuilder& EnableDynamicState(const vk::DynamicState &state);
 
       // Consume the builder and construct the pipeline
-      vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr,
-                                vk::SampleCountFlagBits nsamples = vk::SampleCountFlagBits::e8);
+      vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr);
 
       ~GraphicsPipelineBuilder();
  
