@@ -12,46 +12,33 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://gnu.org/licenses/gpl-2.0.txt>
-
 #ifndef _GAMEPAD_H
 #define _GAMEPAD_H
 
 #include <memory>
 #include <functional>
 
-enum Axis {
-  LEFT_STICK_X = 0,
-  LEFT_STICK_Y,
-  RIGHT_STICK_X,
-  RIGHT_STICK_Y,
-  NUM_SUPPORTED_AXES
+enum class EventType {
+  kUnknown = 0,
+  kButtonSouth,
+  kButtonEast,
+  kButtonNorth,
+  kButtonWest,
+  kAxisLeftX,
+  kAxisLeftY,
+  kAxisRightX,
+  kAxisRightY,
 };
 
-enum Button {
-  ACTION_BUTTON_SOUTH = 0,
-  ACTION_BUTTON_EAST,
-  ACTION_BUTTON_NORTH,
-  ACTION_BUTTON_WEST,
-  NUM_SUPPORTED_BUTTONS
-};
-
-// If 'is_button' is true, the
-// button is pressed if value > 0.
-// Source field is a value of the enum Button.
-// If 'is_button' is false, the struct
-// represents the normalized values of the axis.
-// Source field is a value of the enum Axis.
 struct EventData {
   float value; // The normalized value of the axis/button.
-  int source; // Either Axis or Button type.
-  bool is_button; // True if the event is from a button,
-                  // false if from an axis.
+  EventType type; // Either Axis or Button type.
 };
 
 // Simple event-driven class to read events
 // from a compatible gamecontroller evdev linux interface.
 class Gamepad {
-public:
+ public:
   ~Gamepad();
 
   // Create a Gamepad by passing the path of a /dev/input/event<x>
@@ -69,11 +56,9 @@ public:
   // The call is always non blocking.
   void ReadEvents();
 
-private:
+ private:
   class Impl;
   Gamepad(std::unique_ptr<Impl> &impl);
   std::unique_ptr<Impl> impl_;
 };
-
-
 #endif // _GAMEPAD_H

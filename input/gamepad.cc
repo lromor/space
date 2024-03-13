@@ -17,42 +17,41 @@
 // from a gamepad using evedev.
 
 #include <string.h>
+#include <string>
 #include <unistd.h>
 #include <iostream>
 
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <libevdev/libevdev.h>
+#include <libevdev-1.0/libevdev/libevdev.h>
 
 #include "gamepad.h"
 
-static bool map_axes(uint16_t code, int *axis) {
+static EventType MapAxes(uint16_t code) {
   switch (code) {
-  case ABS_X: *axis = LEFT_STICK_X; break;
-  case ABS_Y: *axis = LEFT_STICK_Y; break;
-  case ABS_RX: *axis = RIGHT_STICK_X; break;
-  case ABS_RY: *axis = RIGHT_STICK_Y; break;
-  default:
-    return false;
+    case ABS_X: return EventType::kAxisLeftX;
+    case ABS_Y: return EventType::kAxisLeftY;
+    case ABS_RX: return EventType::kAxisRightX;
+    case ABS_RY: return EventType::kAxisRightY;
+    default:
+      return EventType::kUnknown;
   }
-  return true;
 }
 
-static bool map_buttons(uint16_t code, int *button) {
+static EventType MapButtons(uint16_t code) {
   switch (code) {
-  case BTN_SOUTH: *button = ACTION_BUTTON_SOUTH; break;
-  case BTN_EAST: *button =  ACTION_BUTTON_EAST; break;
-  case BTN_NORTH: *button = ACTION_BUTTON_NORTH; break;
-  case BTN_WEST: *button = ACTION_BUTTON_WEST; break;
-  default:
-    return false;
+    case BTN_SOUTH: return EventType::kButtonSouth;
+    case BTN_EAST: return EventType::kButtonEast;
+    case BTN_NORTH: return EventType::kButtonNorth;
+    case BTN_WEST: return EventType::kButtonWest;
+    default:
+      return EventType::kUnknown;
   }
-  return true;
 }
 
 class Gamepad::Impl {
-public:
+ public:
   Impl() : fd_(-1), dev_(NULL) {}
   bool Init(const std::string &path);
   ~Impl() {
@@ -65,8 +64,8 @@ public:
   void ReadEvents();
   void SetEventCallback(const EventCallback &clbk);
   const bool MapSupportedEvent(
-    struct input_event *event, struct EventData *data);
-private:
+      struct input_event *event, struct EventData *data);
+ private:
 
   void print_stats();
 
@@ -85,7 +84,7 @@ std::unique_ptr<Gamepad> Gamepad::Create(const std::string &path) {
 }
 
 bool Gamepad::Impl::Init(const std::string &path) {
-  int rc = 1;
+  int rc = -1;
   fd_ = open(path.c_str(), O_RDONLY | O_NONBLOCK);
   rc = libevdev_new_from_fd(fd_, &dev_);
   if (rc < 0) {
@@ -104,31 +103,28 @@ bool Gamepad::Impl::Init(const std::string &path) {
   return true;
 }
 
-void Gamepad::Impl::SetEventCallback(
-    const EventCallback &clbk) { clbk_ = clbk; }
+void Gamepad::Impl::SetEventCallback(const EventCallback &clbk) { clbk_ = clbk; }
 
 const bool Gamepad::Impl::MapSupportedEvent(
-  struct input_event *event, struct EventData *data) {
+    struct input_event *event, struct EventData *data) {
   const uint16_t code = event->code;
   const uint16_t type = event->type;
   const uint16_t value = event->value;
-  int source;
-
   if (type == EV_KEY) {
-    if (!map_buttons(code, &source))
+    const EventType button_source = MapButtons(code);
+    if (button_source == EventType::kUnknown)
       return false;
-    data->source = source;
-    data->is_button = true;
+    data->type = button_source;
     data->value = value;
     return true;
   }
   if (type == EV_ABS) {
-    if (!map_axes(code, &source))
+    const EventType axis_source = MapAxes(code);
+    if (axis_source == EventType::kUnknown)
       return false;
     const struct input_absinfo *abs =
-      libevdev_get_abs_info(dev_, code);
-    data->source = source;
-    data->is_button = false;
+        libevdev_get_abs_info(dev_, code);
+    data->type = axis_source;
     const int delta = (abs->maximum - abs->minimum);
     data->value = value * 2.0 / delta - 1.0;
     return true;

@@ -1,6 +1,6 @@
-CXX=g++
+CXX?=g++
 
-CFLAGS=-g -O0 -Wall -std=c++17
+CFLAGS=-std=c++20
 CFLAGS+=-I/usr/include/libevdev-1.0
 
 OBJECTS=xinput2.o gamepad.o

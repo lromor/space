@@ -56,7 +56,7 @@ private:
   Window window_;
   int pointer_device_, keyboard_device_;
   int xi_opcode_, xi_event_, xi_error_;
- 
+
   std::vector<KeyButtonCallback> on_key_event_;
   std::vector<KeyButtonCallback> on_button_event_;
   std::vector<WheelCallback> on_wheel_event_;

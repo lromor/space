@@ -1,5 +1,3 @@
-// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
-// Copyright(c) Leonardo Romor <leonardo.romor@gmail.com>
 //
 // This program is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,6 +13,7 @@
 #include "input/xinput2.h"
 #include <X11/X.h>
 #include <algorithm>
+
 #define XK_MISCELLANY
 #define XK_LATIN1
 
@@ -169,6 +168,9 @@ int main(int argc, char *argv[]) {
     // Get file descriptor for when the rendering is done to add
     // to be added to select.
     auto start = std::chrono::steady_clock::now();
+    using fsec = std::chrono::duration<double, std::chrono::seconds::period>;
+    using fmsec = std::chrono::duration<double, std::chrono::milliseconds::period>;
+
     for (;;) {
       FD_ZERO(&read_fds);
       FD_SET(x11_fd, &read_fds);
@@ -195,12 +197,12 @@ int main(int argc, char *argv[]) {
         }
       }
       if (interface_manager.Exit()) break;
-
-      auto delta = std::chrono::steady_clock::now() - start;
-      if (std::chrono::duration_cast<std::chrono::milliseconds>(delta).count() > 16) {
-        scene.SubmitRendering();
-        scene.Present();
-      }
+      std::chrono::duration<double> delta = std::chrono::steady_clock::now() - start;
+      const double dt = std::chrono::duration_cast<fmsec>(delta).count();
+      interface_manager.UpdateScene(dt / 100);
+      scene.SubmitRendering();
+      scene.Present();
+      start = std::chrono::steady_clock::now();
     }
   }
 

@@ -21,6 +21,8 @@
 
 #include <vector>
 #include <optional>
+#include <memory>
+#include <limits>
 
 #include <vulkan/vulkan.hpp>
 #include <X11/Xlib.h>
@@ -279,7 +281,7 @@ namespace space {
       vk::UniquePipeline Create(vk::UniquePipelineCache *pipeline_cache = nullptr);
 
       ~GraphicsPipelineBuilder();
- 
+
     private:
       class Impl;
       std::unique_ptr<Impl> impl_;
