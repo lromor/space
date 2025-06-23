@@ -1,6 +1,6 @@
 CXX=clang++
 
-CFLAGS=-g -O0 -Wall -DVK_USE_PLATFORM_XLIB_KHR -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -std=c++20
+CFLAGS=-g -O0 -Wall -DVK_USE_PLATFORM_XLIB_KHR -DVULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1 -std=c++20 -DNDEBUG
 CFLAGS+=-I/usr/include/libevdev-1.0
 LD_FLAGS=-lvulkan -lX11 -lXi -levdev -ldl
 STATIC_LIBS=input/libspaceinput.a

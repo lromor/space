@@ -33,19 +33,21 @@ InterfaceManager::InterfaceManager(Display *display, Window window,
   if (gamepad)
     gamepad->SetEventCallback(
         [&](const struct EventData &data) {
-          const float value = (std::fabs(data.value) < 5e-2) ? 0 : data.value;
+          const float kForwardSpeed = 2.0f;
+          const float kRotateSpeed = 5.0f;
+          const float value = data.value;
           switch(data.type) {
             case EventType::kAxisLeftX:
-              gamepad_state_.axis_left_x_ = value;
+              gamepad_state_.axis_left_x_ = value * kForwardSpeed;
               break;
             case EventType::kAxisLeftY:
-              gamepad_state_.axis_left_y_ = value;
+              gamepad_state_.axis_left_y_ = value * kForwardSpeed;
               break;
             case EventType::kAxisRightX:
-              gamepad_state_.axis_right_x_ = value;
+              gamepad_state_.axis_right_x_ = value * kRotateSpeed;
               break;
             case EventType::kAxisRightY:
-              gamepad_state_.axis_right_y_ = value;
+              gamepad_state_.axis_right_y_ = value * kRotateSpeed;
               break;
             default: break;
           }

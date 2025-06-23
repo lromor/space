@@ -9,7 +9,6 @@ pkgs.mkShell {
       gnumake
       clang-tools
       clang
-      linuxKernel.packages.linux_5_15.perf  # performance tests
       xorg.libX11
       xorg.libXi
       vulkan-headers

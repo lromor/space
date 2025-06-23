@@ -311,7 +311,7 @@ namespace space {
       // For now we just pick the first device. We should improve the code by
       // searching for the device that has best properties or any other policy
       // possibly configurable policy.
-      vk::PhysicalDevice physical_device = instance->enumeratePhysicalDevices().front();
+      vk::PhysicalDevice physical_device = instance->enumeratePhysicalDevices()[0];
 
       // Init the surface
       vk::UniqueSurfaceKHR surface =
@@ -334,11 +334,12 @@ namespace space {
       };
 
       const auto physical_device_features = physical_device.getFeatures();
+      const auto p = physical_device.getProperties();
+      std::cout << p.deviceName << std::endl;
       vk::UniqueDevice device = CreateDevice(
         physical_device, graphics_and_present_queue_family_index.first,
         device_extensions, &physical_device_features);
       VULKAN_HPP_DEFAULT_DISPATCHER.init(*device);
-
       return VkAppContext{
         std::move(dl),
         std::move(instance),

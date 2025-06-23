@@ -16,6 +16,7 @@
 // This file contains the classes and function definitions for reading events
 // from a gamepad using evedev.
 
+#include <cmath>
 #include <string.h>
 #include <string>
 #include <unistd.h>
@@ -30,10 +31,13 @@
 
 static EventType MapAxes(uint16_t code) {
   switch (code) {
-    case ABS_X: return EventType::kAxisLeftX;
-    case ABS_Y: return EventType::kAxisLeftY;
-    case ABS_RX: return EventType::kAxisRightX;
-    case ABS_RY: return EventType::kAxisRightY;
+    case ABS_X: { return EventType::kAxisLeftX; }
+    case ABS_Y: { return EventType::kAxisLeftY; }
+    case ABS_RX: { return EventType::kAxisRightX; }
+    case ABS_RY: { return EventType::kAxisRightY; }
+    // X-box controller somehow sets the right one as z.
+    case ABS_Z: { return EventType::kAxisRightX; }
+    case ABS_RZ: { return EventType::kAxisRightY; }
     default:
       return EventType::kUnknown;
   }
@@ -95,11 +99,7 @@ bool Gamepad::Impl::Init(const std::string &path) {
     printf("This device does not look like a gamepad.\n");
     return false;
   }
-
-#ifndef NDEBUG
   fprintf(stdout, "Gamepad device name: \"%s\"\n", libevdev_get_name(dev_));
-#endif
-
   return true;
 }
 
@@ -126,7 +126,8 @@ const bool Gamepad::Impl::MapSupportedEvent(
         libevdev_get_abs_info(dev_, code);
     data->type = axis_source;
     const int delta = (abs->maximum - abs->minimum);
-    data->value = value * 2.0 / delta - 1.0;
+    const float value = ((float) abs->value - abs->minimum) * 2 / delta - 1;
+    data->value = (std::fabs(value) < ((float)abs->flat / delta)) ? 0 : value;
     return true;
   }
   return false;

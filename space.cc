@@ -113,6 +113,12 @@ int main(int argc, char *argv[]) {
   Window window = XCreateSimpleWindow(
     display, root_window, 0, 0, kWidth, kHeight, 0, 0, 0);
   XEvent event;
+  // Add icon.
+  // XChangeProperty(
+  //     display, window,
+  //     XInternAtom(display, "_NET_WM_ICON", False),
+  //     XInternAtom(display, "CARDINAL", False),
+  //     32, PropModeReplace, (const unsigned char*) buffer, length);
 
   // X11 Keyboard and mouse event utility class
   XInput2 xinput2(display, window);
